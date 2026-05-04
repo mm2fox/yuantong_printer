@@ -1,0 +1,102 @@
+# -*- mode: python ; coding: utf-8 -*-
+import os
+import sys
+from pathlib import Path
+
+block_cipher = None
+
+PROJECT_ROOT = os.path.abspath('.')
+
+a = Analysis(
+    ['standalone_main.py'],
+    pathex=[PROJECT_ROOT, os.path.join(PROJECT_ROOT, 'backend')],
+    binaries=[],
+    datas=[
+        (os.path.join(PROJECT_ROOT, 'frontend', 'dist'), 'frontend/dist'),
+        (os.path.join(PROJECT_ROOT, 'backend', 'app'), 'backend/app'),
+        (os.path.join(os.path.dirname(os.path.abspath('.')), 'yuantong_logo.ico'), '.'),
+    ],
+    hiddenimports=[
+        'uvicorn.logging',
+        'uvicorn.loops',
+        'uvicorn.loops.auto',
+        'uvicorn.protocols',
+        'uvicorn.protocols.http',
+        'uvicorn.protocols.http.auto',
+        'uvicorn.protocols.websockets',
+        'uvicorn.protocols.websockets.auto',
+        'uvicorn.lifespan',
+        'uvicorn.lifespan.on',
+        'uvicorn.lifespan.off',
+        'fastapi',
+        'fastapi.middleware',
+        'fastapi.middleware.cors',
+        'fastapi.staticfiles',
+        'fastapi.responses',
+        'sqlalchemy.ext.asyncio',
+        'sqlalchemy.orm',
+        'sqlalchemy.dialects.sqlite',
+        'aiosqlite',
+        'pydantic',
+        'pydantic_settings',
+        'jose',
+        'passlib',
+        'passlib.handlers',
+        'passlib.handlers.bcrypt',
+        'multipart',
+        'reportlab',
+        'reportlab.lib',
+        'reportlab.pdfgen',
+        'fitz',
+        'PIL',
+        'pystray',
+        'pystray._win32',
+        'openpyxl',
+        'win32api',
+        'win32con',
+        'win32print',
+        'win32ui',
+        'pythoncom',
+        'pywintypes',
+    ],
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[
+        'matplotlib',
+        'numpy',
+        'scipy',
+        'pandas',
+        'IPython',
+        'notebook',
+    ],
+    win_no_prefer_redirects=False,
+    win_private_assemblies=False,
+    cipher=block_cipher,
+    noarchive=False,
+)
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    [],
+    name='缘通寺院信息管理系统',
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=True,
+    upx_exclude=[],
+    runtime_tmpdir=None,
+    console=False,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+    icon=os.path.join(os.path.dirname(os.path.abspath('.')), 'yuantong_logo.ico'),
+)

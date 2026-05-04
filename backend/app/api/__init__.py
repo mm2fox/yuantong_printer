@@ -1,0 +1,9 @@
+from .auth import router as auth_router
+from .temples import router as temples_router
+from .fahui_users import router as fahui_users_router
+from .fahui_records import router as fahui_records_router
+from .fahui_info import router as fahui_info_router
+from .printer_templates import router as printer_templates_router
+from .permissions import router as permissions_router
+from .system_logs import router as system_logs_router
+from .database import router as database_router
