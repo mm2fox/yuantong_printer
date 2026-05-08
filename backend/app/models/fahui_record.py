@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Index
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from ..core.database import Base
@@ -34,6 +34,16 @@ class FahuiRecord(Base):
     temple_id = Column(Integer, ForeignKey("temples.id"))
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     fahui_user = relationship("FahuiUser", back_populates="records")
     temple = relationship("Temple", backref="fahui_records")
+
+    __table_args__ = (
+        Index('ix_fahui_records_temple_id', 'temple_id'),
+        Index('ix_fahui_records_temple_fahui_name', 'temple_id', 'fahui_name'),
+        Index('ix_fahui_records_temple_djdate', 'temple_id', 'djdate'),
+        Index('ix_fahui_records_temple_prt', 'temple_id', 'prt'),
+        Index('ix_fahui_records_temple_yanwang', 'temple_id', 'yanwang'),
+        Index('ix_fahui_records_施主姓名', '施主姓名'),
+        Index('ix_fahui_records_施主编号', '施主编号'),
+    )

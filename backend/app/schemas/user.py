@@ -31,6 +31,7 @@ class UserResponse(BaseModel):
     username: str
     real_name: Optional[str] = None
     role: Optional[str] = None
+    permissions: Optional[str] = None
     is_active: bool
     temple_id: Optional[int] = None
     created_at: datetime

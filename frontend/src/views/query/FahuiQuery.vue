@@ -629,26 +629,11 @@ import { ElMessage, ElMessageBox } from 'element-plus'
 import { fahuiRecordApi } from '@/api/fahuiRecords'
 import { fahuiInfoApi } from '@/api/fahuiInfo'
 import { fahuiUserApi } from '@/api/fahuiUsers'
-import { printerTemplateApi } from '@/api/printerTemplates'
 import PrintPreviewDialog from '@/components/PrintPreviewDialog.vue'
-import { pinyin } from 'pinyin-pro'
-
-const pinyinMatch = (text, keyword) => {
-  if (!text || !keyword) return false
-  const str = String(text).toLowerCase()
-  const kw = keyword.toLowerCase()
-  if (str.includes(kw)) return true
-  if (!/[a-zA-Z]/.test(kw)) return false
-  const py = pinyin(str, { toneType: 'none', type: 'array' })
-  if (py.some(s => s.toLowerCase() === kw)) return true
-  const joined = py.join('').toLowerCase()
-  if (joined.includes(kw)) return true
-  return false
-}
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const allData = ref([])
+const tableData = ref([])
 const fahuiList = ref([])
 const shizhuList = ref([])
 const shizhuLoading = ref(false)
@@ -679,52 +664,33 @@ const searchForm = reactive({
   prt: null
 })
 
-const filteredData = computed(() => {
-  let data = allData.value
-  if (searchForm.keyword) {
-    const kw = searchForm.keyword.toLowerCase()
-    data = data.filter(item =>
-      Object.values(item).some(val =>
-        val !== null && val !== undefined && pinyinMatch(String(val), kw)
-      )
-    )
-  }
-  if (searchForm.fahui_name) {
-    data = data.filter(item => item.fahui_name === searchForm.fahui_name)
-  }
-  if (searchForm.shizhu_name) {
-    const keyword = searchForm.shizhu_name.toLowerCase()
-    data = data.filter(item => pinyinMatch(item.施主姓名, keyword))
-  }
-  if (searchForm.shizhu_code) {
-    const keyword = searchForm.shizhu_code.toLowerCase()
-    data = data.filter(item => item.施主编号?.toLowerCase().includes(keyword))
-  }
-  if (searchForm.start_date) {
-    data = data.filter(item => item.djdate >= searchForm.start_date)
-  }
-  if (searchForm.end_date) {
-    data = data.filter(item => item.djdate <= searchForm.end_date)
-  }
-  if (searchForm.paiwei_type) {
-    data = data.filter(item => item.paiwei_type === searchForm.paiwei_type)
-  }
-  if (searchForm.yanwang !== null && searchForm.yanwang !== '') {
-    data = data.filter(item => item.yanwang === parseInt(searchForm.yanwang))
-  }
-  if (searchForm.prt !== null && searchForm.prt !== '') {
-    data = data.filter(item => item.prt === parseInt(searchForm.prt))
-  }
-  return data
-})
+const fetchData = async () => {
+  loading.value = true
+  try {
+    const params = {
+      skip: (currentPage.value - 1) * pageSize.value,
+      limit: pageSize.value
+    }
+    if (searchForm.keyword) params.keyword = searchForm.keyword
+    if (searchForm.fahui_name) params.fahui_name = searchForm.fahui_name
+    if (searchForm.shizhu_name) params.shizhu_name = searchForm.shizhu_name
+    if (searchForm.shizhu_code) params.shizhu_code = searchForm.shizhu_code
+    if (searchForm.start_date) params.start_date = searchForm.start_date
+    if (searchForm.end_date) params.end_date = searchForm.end_date
+    if (searchForm.paiwei_type) params.paiwei_type = searchForm.paiwei_type
+    if (searchForm.yanwang !== null && searchForm.yanwang !== '') params.yanwang = searchForm.yanwang
+    if (searchForm.prt !== null && searchForm.prt !== '') params.prt = searchForm.prt
 
-const tableData = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  total.value = filteredData.value.length
-  totalAmount.value = filteredData.value.reduce((sum, item) => sum + (item.amount || 0), 0)
-  return filteredData.value.slice(start, end)
-})
+    const res = await fahuiRecordApi.queryByFahui(params)
+    tableData.value = res.records || []
+    total.value = res.total || 0
+    totalAmount.value = res.total_amount || 0
+  } catch (error) {
+    console.error('查询失败:', error)
+  } finally {
+    loading.value = false
+  }
+}
 
 const fetchFahuiList = async () => {
   try {
@@ -735,22 +701,9 @@ const fetchFahuiList = async () => {
   }
 }
 
-const fetchData = async () => {
-  loading.value = true
-  try {
-    const res = await fahuiRecordApi.queryByFahui({ limit: 100000 })
-    allData.value = res.records || []
-    total.value = allData.value.length
-    totalAmount.value = res.total_amount || 0
-  } catch (error) {
-    console.error('查询失败:', error)
-  } finally {
-    loading.value = false
-  }
-}
-
 const handleSearch = () => {
   currentPage.value = 1
+  fetchData()
 }
 
 const handleReset = () => {
@@ -766,58 +719,85 @@ const handleReset = () => {
     prt: null
   })
   currentPage.value = 1
+  fetchData()
 }
 
-const handleExport = () => {
-  if (filteredData.value.length === 0) {
+const handleExport = async () => {
+  if (total.value === 0) {
     ElMessage.warning('没有数据可导出')
     return
   }
-  
-  const headers = ['施主编号', '施主姓名', '法会名称', '牌位类型', '金额', '类型', '登记日期', '经办人', '打印状态', '姓名1', '姓名2', '姓名3', '姓名4', '姓名5', '备注']
-  const rows = filteredData.value.map(item => [
-    item.施主编号 || '',
-    item.施主姓名 || '',
-    item.fahui_name || '',
-    item.paiwei_type || '',
-    item.amount || 0,
-    item.yanwang === 0 ? '延生' : '往生',
-    item.djdate || '',
-    item.经办人 || '',
-    item.prt === 1 ? '已打印' : '未打印',
-    item.xm1 || '',
-    item.xm2 || '',
-    item.xm3 || '',
-    item.xm4 || '',
-    item.xm5 || '',
-    item.remarks || ''
-  ])
-  
-  let csvContent = '\uFEFF' + headers.join(',') + '\n'
-  rows.forEach(row => {
-    csvContent += row.map(cell => `"${cell}"`).join(',') + '\n'
-  })
-  
-  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-  const link = document.createElement('a')
-  const url = URL.createObjectURL(blob)
-  link.setAttribute('href', url)
-  link.setAttribute('download', `法会记录查询_${new Date().toISOString().slice(0, 10)}.csv`)
-  link.style.visibility = 'hidden'
-  document.body.appendChild(link)
-  link.click()
-  document.body.removeChild(link)
-  
-  ElMessage.success('导出成功')
+
+  try {
+    const params = { skip: 0, limit: 100000 }
+    if (searchForm.keyword) params.keyword = searchForm.keyword
+    if (searchForm.fahui_name) params.fahui_name = searchForm.fahui_name
+    if (searchForm.shizhu_name) params.shizhu_name = searchForm.shizhu_name
+    if (searchForm.shizhu_code) params.shizhu_code = searchForm.shizhu_code
+    if (searchForm.start_date) params.start_date = searchForm.start_date
+    if (searchForm.end_date) params.end_date = searchForm.end_date
+    if (searchForm.paiwei_type) params.paiwei_type = searchForm.paiwei_type
+    if (searchForm.yanwang !== null && searchForm.yanwang !== '') params.yanwang = searchForm.yanwang
+    if (searchForm.prt !== null && searchForm.prt !== '') params.prt = searchForm.prt
+
+    const res = await fahuiRecordApi.queryByFahui(params)
+    const exportData = res.records || []
+
+    if (exportData.length === 0) {
+      ElMessage.warning('没有数据可导出')
+      return
+    }
+
+    const headers = ['施主编号', '施主姓名', '法会名称', '牌位类型', '金额', '类型', '登记日期', '经办人', '打印状态', '姓名1', '姓名2', '姓名3', '姓名4', '姓名5', '备注']
+    const rows = exportData.map(item => [
+      item.施主编号 || '',
+      item.施主姓名 || '',
+      item.fahui_name || '',
+      item.paiwei_type || '',
+      item.amount || 0,
+      item.yanwang === 0 ? '延生' : '往生',
+      item.djdate || '',
+      item.经办人 || '',
+      item.prt === 1 ? '已打印' : '未打印',
+      item.xm1 || '',
+      item.xm2 || '',
+      item.xm3 || '',
+      item.xm4 || '',
+      item.xm5 || '',
+      item.remarks || ''
+    ])
+
+    let csvContent = '\uFEFF' + headers.join(',') + '\n'
+    rows.forEach(row => {
+      csvContent += row.map(cell => `"${cell}"`).join(',') + '\n'
+    })
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const link = document.createElement('a')
+    const url = URL.createObjectURL(blob)
+    link.setAttribute('href', url)
+    link.setAttribute('download', `法会记录查询_${new Date().toISOString().slice(0, 10)}.csv`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+
+    ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  }
 }
 
 const handleSizeChange = (val) => {
   pageSize.value = val
   currentPage.value = 1
+  fetchData()
 }
 
 const handleCurrentChange = (val) => {
   currentPage.value = val
+  fetchData()
 }
 
 const handleEditFromPrint = () => {
@@ -904,16 +884,16 @@ const handleBatchPrinted = async (prtStatus) => {
     ElMessage.warning('请先选择要操作的记录')
     return
   }
-  
+
   const statusText = prtStatus === 1 ? '已打印' : '未打印'
   try {
     await ElMessageBox.confirm(`确定要将选中的 ${selectedRows.value.length} 条记录标记为${statusText}吗？`, '提示', {
       type: 'warning'
     })
-    
+
     let successCount = 0
     let failCount = 0
-    
+
     for (const row of selectedRows.value) {
       try {
         await fahuiRecordApi.update(row.id, { prt: prtStatus })
@@ -923,7 +903,7 @@ const handleBatchPrinted = async (prtStatus) => {
         console.error(`更新记录 ${row.id} 失败:`, error)
       }
     }
-    
+
     if (successCount > 0) {
       ElMessage.success(`成功标记 ${successCount} 条记录为${statusText}`)
       fetchData()
@@ -938,16 +918,10 @@ const handleBatchPrinted = async (prtStatus) => {
   }
 }
 
-
-
 const handlePrint = (row) => {
   printData.value = row
   printVisible.value = true
 }
-
-
-
-
 
 const formData = reactive({
   id: null,
@@ -1153,7 +1127,7 @@ const fillNamesFromShizhu = (shizhu) => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   await formRef.value.validate(async (valid) => {
     if (valid) {
       submitLoading.value = true
@@ -1231,7 +1205,7 @@ const handleOpenAddFahui = () => {
 
 const handleSubmitAddFahui = async () => {
   if (!addFahuiFormRef.value) return
-  
+
   await addFahuiFormRef.value.validate(async (valid) => {
     if (valid) {
       addFahuiLoading.value = true
@@ -1319,7 +1293,7 @@ const handleOpenAddShizhu = async () => {
 
 const handleSubmitAddShizhu = async () => {
   if (!addShizhuFormRef.value) return
-  
+
   await addShizhuFormRef.value.validate(async (valid) => {
     if (valid) {
       addShizhuLoading.value = true

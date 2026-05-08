@@ -59,7 +59,7 @@ const routes = [
         path: 'print/templates',
         name: 'TemplateList',
         component: () => import('@/views/print/TemplateList.vue'),
-        meta: { title: '打印模板', requiresAdmin: true }
+        meta: { title: '打印模板', requiredPermission: 'print_template' }
       },
       {
         path: 'system/users',
@@ -108,6 +108,8 @@ router.beforeEach((to, from, next) => {
   } else if (to.path === '/login' && userStore.isLoggedIn()) {
     next('/query/fahui')
   } else if (to.meta.requiresAdmin && userStore.userInfo?.role !== '管理员') {
+    next('/query/fahui')
+  } else if (to.meta.requiredPermission && !userStore.hasPermission(to.meta.requiredPermission)) {
     next('/query/fahui')
   } else {
     next()

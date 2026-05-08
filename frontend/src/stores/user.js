@@ -43,6 +43,13 @@ export const useUserStore = defineStore('user', () => {
     return userInfo.value?.role === '管理员'
   }
 
+  const hasPermission = (permission) => {
+    if (userInfo.value?.role === '管理员') return true
+    if (!userInfo.value?.permissions) return false
+    const perms = userInfo.value.permissions.split(',').map(p => p.trim()).filter(p => p)
+    return perms.includes(permission)
+  }
+
   return {
     token,
     userInfo,
@@ -50,6 +57,7 @@ export const useUserStore = defineStore('user', () => {
     logout,
     getUserInfo,
     isLoggedIn,
-    isAdmin
+    isAdmin,
+    hasPermission
   }
 })

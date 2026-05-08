@@ -97,6 +97,7 @@ async def create_user(
         password_hash=get_password_hash(user_data.password),
         real_name=user_data.real_name,
         role=user_data.role,
+        permissions="query,print_template" if user_data.role != "管理员" else None,
         is_active=user_data.is_active if user_data.is_active is not None else True,
         temple_id=user_data.temple_id
     )

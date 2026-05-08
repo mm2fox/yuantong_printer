@@ -178,6 +178,7 @@ def _serve_asset(path, content):
 async def startup():
     await init_db()
     await _create_default_data()
+    await _migrate_data()
 
 async def _create_default_data():
     try:
@@ -216,6 +217,7 @@ async def _create_default_data():
                 ('shizhu', '施主管理', '管理施主信息'),
                 ('fahui', '法会管理', '管理法会信息和登记'),
                 ('print', '打印管理', '打印牌位'),
+                ('print_template', '打印模板', '管理打印模板'),
                 ('system', '系统管理', '系统设置和用户管理')
             ]
             for name, display_name, description in default_permissions:
@@ -228,6 +230,45 @@ async def _create_default_data():
             log_message("默认数据创建成功 - 默认管理员: admin / admin123")
     except Exception as e:
         log_message(f"创建默认数据失败: {e}")
+        traceback.print_exc()
+
+async def _migrate_data():
+    try:
+        from app.core.database import AsyncSessionLocal
+        from sqlalchemy import text
+        from datetime import datetime
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(text("SELECT COUNT(*) FROM permissions WHERE name = 'print_template'"))
+            if result.scalar() == 0:
+                now = datetime.now().isoformat()
+                await session.execute(text(
+                    "INSERT INTO permissions (name, display_name, description, created_at) "
+                    "VALUES ('print_template', '打印模板', '管理打印模板', :now)"
+                ), {"now": now})
+                await session.commit()
+                log_message("已添加 print_template 权限")
+
+            result = await session.execute(text(
+                "SELECT id, permissions FROM users WHERE role = '普通用户' AND is_active = 1"
+            ))
+            users = result.fetchall()
+            for user_id, perms in users:
+                if not perms:
+                    new_perms = "query,print_template"
+                else:
+                    perm_list = [p.strip() for p in perms.split(",") if p.strip()]
+                    if "print_template" not in perm_list:
+                        perm_list.append("print_template")
+                    new_perms = ",".join(perm_list)
+                await session.execute(text(
+                    "UPDATE users SET permissions = :perms WHERE id = :uid"
+                ), {"perms": new_perms, "uid": user_id})
+            await session.commit()
+            if users:
+                log_message(f"已为 {len(users)} 个普通用户添加 print_template 权限")
+    except Exception as e:
+        log_message(f"数据迁移失败: {e}")
         traceback.print_exc()
 
 @app.get("/")

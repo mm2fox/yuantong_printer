@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, or_, and_
+from sqlalchemy import select, or_, and_, func
 from typing import List, Optional
 from datetime import datetime
 from ..core.database import get_db
@@ -31,71 +31,75 @@ async def get_fahui_records(
 @router.get("/query-by-fahui")
 async def query_by_fahui(
     fahui_name: Optional[str] = Query(None),
+    keyword: Optional[str] = Query(None),
+    shizhu_name: Optional[str] = Query(None),
+    shizhu_code: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
     paiwei_type: Optional[str] = Query(None),
     yanwang: Optional[int] = Query(None),
     prt: Optional[int] = Query(None),
     skip: int = Query(0, ge=0),
-    limit: int = Query(50, ge=1, le=100000),
+    limit: int = Query(20, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    base_query = select(FahuiRecord).where(FahuiRecord.temple_id == current_user.temple_id)
+    base_where = [FahuiRecord.temple_id == current_user.temple_id]
 
     if fahui_name:
-        base_query = base_query.where(FahuiRecord.fahui_name == fahui_name)
+        base_where.append(FahuiRecord.fahui_name == fahui_name)
     if start_date:
-        base_query = base_query.where(FahuiRecord.djdate >= start_date)
+        base_where.append(FahuiRecord.djdate >= start_date)
     if end_date:
-        base_query = base_query.where(FahuiRecord.djdate <= end_date)
+        base_where.append(FahuiRecord.djdate <= end_date)
     if paiwei_type:
-        base_query = base_query.where(FahuiRecord.paiwei_type == paiwei_type)
+        base_where.append(FahuiRecord.paiwei_type == paiwei_type)
     if yanwang is not None:
-        base_query = base_query.where(FahuiRecord.yanwang == yanwang)
+        base_where.append(FahuiRecord.yanwang == yanwang)
     if prt is not None:
-        base_query = base_query.where(FahuiRecord.prt == prt)
+        base_where.append(FahuiRecord.prt == prt)
+    if shizhu_name:
+        base_where.append(FahuiRecord.施主姓名.contains(shizhu_name))
+    if shizhu_code:
+        base_where.append(FahuiRecord.施主编号.contains(shizhu_code))
+    if keyword:
+        base_where.append(or_(
+            FahuiRecord.施主姓名.contains(keyword),
+            FahuiRecord.施主编号.contains(keyword),
+            FahuiRecord.fahui_name.contains(keyword),
+            FahuiRecord.xm1.contains(keyword),
+            FahuiRecord.xm2.contains(keyword),
+            FahuiRecord.xm3.contains(keyword),
+            FahuiRecord.xm4.contains(keyword),
+            FahuiRecord.xm5.contains(keyword),
+            FahuiRecord.xm6.contains(keyword),
+            FahuiRecord.xm7.contains(keyword),
+            FahuiRecord.xm8.contains(keyword),
+            FahuiRecord.xm9.contains(keyword),
+            FahuiRecord.xm10.contains(keyword),
+            FahuiRecord.remarks.contains(keyword),
+            FahuiRecord.经办人.contains(keyword),
+            FahuiRecord.座次.contains(keyword),
+        ))
 
-    count_query = select(FahuiRecord.id).where(FahuiRecord.temple_id == current_user.temple_id)
+    where_clause = and_(*base_where)
 
-    if fahui_name:
-        count_query = count_query.where(FahuiRecord.fahui_name == fahui_name)
-    if start_date:
-        count_query = count_query.where(FahuiRecord.djdate >= start_date)
-    if end_date:
-        count_query = count_query.where(FahuiRecord.djdate <= end_date)
-    if paiwei_type:
-        count_query = count_query.where(FahuiRecord.paiwei_type == paiwei_type)
-    if yanwang is not None:
-        count_query = count_query.where(FahuiRecord.yanwang == yanwang)
-    if prt is not None:
-        count_query = count_query.where(FahuiRecord.prt == prt)
-
+    count_query = select(func.count(FahuiRecord.id)).where(where_clause)
     count_result = await db.execute(count_query)
-    total = len(count_result.all())
+    total = count_result.scalar()
 
-    query = select(FahuiRecord, FahuiUser).join(FahuiUser, FahuiRecord.fahui_user_id == FahuiUser.id, isouter=True)
+    sum_query = select(func.sum(FahuiRecord.amount)).where(where_clause)
+    sum_result = await db.execute(sum_query)
+    total_amount = sum_result.scalar() or 0
 
-    if fahui_name:
-        query = query.where(FahuiRecord.fahui_name == fahui_name)
-    if start_date:
-        query = query.where(FahuiRecord.djdate >= start_date)
-    if end_date:
-        query = query.where(FahuiRecord.djdate <= end_date)
-    if paiwei_type:
-        query = query.where(FahuiRecord.paiwei_type == paiwei_type)
-    if yanwang is not None:
-        query = query.where(FahuiRecord.yanwang == yanwang)
-    if prt is not None:
-        query = query.where(FahuiRecord.prt == prt)
-
-    query = query.order_by(FahuiRecord.id.desc()).offset(skip).limit(limit)
+    query = select(FahuiRecord, FahuiUser).join(
+        FahuiUser, FahuiRecord.fahui_user_id == FahuiUser.id, isouter=True
+    ).where(where_clause).order_by(FahuiRecord.id.desc()).offset(skip).limit(limit)
 
     result = await db.execute(query)
     rows = result.all()
 
     records = []
-    total_amount = 0
     for record, user in rows:
         record_dict = {
             "id": record.id,
@@ -127,7 +131,6 @@ async def query_by_fahui(
             "功德主": user.功德主 if user else None
         }
         records.append(record_dict)
-        total_amount += record.amount or 0
 
     return {
         "records": records,
@@ -142,27 +145,52 @@ async def query_by_shizhu(
     phone: Optional[str] = Query(None),
     start_date: Optional[str] = Query(None),
     end_date: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    query = select(FahuiRecord, FahuiUser).join(FahuiUser, FahuiRecord.fahui_user_id == FahuiUser.id)
-    
+    base_where = [FahuiRecord.temple_id == current_user.temple_id]
+
     if shizhu_name:
-        query = query.where(FahuiUser.施主姓名.contains(shizhu_name))
+        base_where.append(FahuiRecord.施主姓名.contains(shizhu_name))
     if shizhu_code:
-        query = query.where(FahuiUser.施主编号.contains(shizhu_code))
-    if phone:
-        query = query.where(FahuiUser.电话.contains(phone))
+        base_where.append(FahuiRecord.施主编号.contains(shizhu_code))
     if start_date:
-        query = query.where(FahuiRecord.djdate >= start_date)
+        base_where.append(FahuiRecord.djdate >= start_date)
     if end_date:
-        query = query.where(FahuiRecord.djdate <= end_date)
-    
+        base_where.append(FahuiRecord.djdate <= end_date)
+
+    where_no_phone = and_(*base_where)
+
+    if phone:
+        query_base = select(FahuiRecord, FahuiUser).join(
+            FahuiUser, FahuiRecord.fahui_user_id == FahuiUser.id
+        ).where(where_no_phone).where(FahuiUser.电话.contains(phone))
+        count_base = select(func.count(FahuiRecord.id)).join(
+            FahuiUser, FahuiRecord.fahui_user_id == FahuiUser.id
+        ).where(where_no_phone).where(FahuiUser.电话.contains(phone))
+        sum_base = select(func.sum(FahuiRecord.amount)).join(
+            FahuiUser, FahuiRecord.fahui_user_id == FahuiUser.id
+        ).where(where_no_phone).where(FahuiUser.电话.contains(phone))
+    else:
+        query_base = select(FahuiRecord, FahuiUser).join(
+            FahuiUser, FahuiRecord.fahui_user_id == FahuiUser.id, isouter=True
+        ).where(where_no_phone)
+        count_base = select(func.count(FahuiRecord.id)).where(where_no_phone)
+        sum_base = select(func.sum(FahuiRecord.amount)).where(where_no_phone)
+
+    count_result = await db.execute(count_base)
+    total = count_result.scalar()
+
+    sum_result = await db.execute(sum_base)
+    total_amount = sum_result.scalar() or 0
+
+    query = query_base.order_by(FahuiRecord.id.desc()).offset(skip).limit(limit)
     result = await db.execute(query)
     rows = result.all()
-    
+
     records = []
-    total_amount = 0
     for record, user in rows:
         record_dict = {
             "id": record.id,
@@ -194,11 +222,10 @@ async def query_by_shizhu(
             "功德主": user.功德主 if user else None
         }
         records.append(record_dict)
-        total_amount += record.amount or 0
-    
+
     return {
         "records": records,
-        "total": len(records),
+        "total": total,
         "total_amount": total_amount
     }
 

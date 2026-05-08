@@ -539,7 +539,7 @@ import { printerTemplateApi } from '@/api/printerTemplates'
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const allData = ref([])
+const tableData = ref([])
 const fahuiList = ref([])
 const shizhuList = ref([])
 const shizhuLoading = ref(false)
@@ -557,6 +557,7 @@ const selectedShizhuName = computed(() => {
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
+const totalAmount = ref(0)
 
 const searchForm = reactive({
   fahui_name: '',
@@ -597,46 +598,23 @@ const formRules = {
   amount: [{ required: true, message: '请输入金额', trigger: 'blur' }]
 }
 
-const filteredData = computed(() => {
-  let data = allData.value
-  
-  if (searchForm.fahui_name) {
-    data = data.filter(item => item.fahui_name === searchForm.fahui_name)
-  }
-  if (searchForm.shizhu_name) {
-    const keyword = searchForm.shizhu_name.toLowerCase()
-    data = data.filter(item => item.施主姓名?.toLowerCase().includes(keyword))
-  }
-  if (searchForm.paiwei_type) {
-    data = data.filter(item => item.paiwei_type === searchForm.paiwei_type)
-  }
-  if (searchForm.yanwang !== '' && searchForm.yanwang !== null) {
-    data = data.filter(item => item.yanwang === parseInt(searchForm.yanwang))
-  }
-  if (searchForm.prt !== '' && searchForm.prt !== null) {
-    data = data.filter(item => item.prt === parseInt(searchForm.prt))
-  }
-  
-  return data
-})
-
-const tableData = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  total.value = filteredData.value.length
-  return filteredData.value.slice(start, end)
-})
-
-const totalAmount = computed(() => {
-  return filteredData.value.reduce((sum, item) => sum + (item.amount || 0), 0)
-})
-
 const fetchData = async () => {
   loading.value = true
   try {
-    const res = await fahuiRecordApi.queryByFahui({})
-    allData.value = res.records || []
-    total.value = allData.value.length
+    const params = {
+      skip: (currentPage.value - 1) * pageSize.value,
+      limit: pageSize.value
+    }
+    if (searchForm.fahui_name) params.fahui_name = searchForm.fahui_name
+    if (searchForm.shizhu_name) params.shizhu_name = searchForm.shizhu_name
+    if (searchForm.paiwei_type) params.paiwei_type = searchForm.paiwei_type
+    if (searchForm.yanwang !== '' && searchForm.yanwang !== null) params.yanwang = searchForm.yanwang
+    if (searchForm.prt !== '' && searchForm.prt !== null) params.prt = searchForm.prt
+
+    const res = await fahuiRecordApi.queryByFahui(params)
+    tableData.value = res.records || []
+    total.value = res.total || 0
+    totalAmount.value = res.total_amount || 0
   } catch (error) {
     console.error('获取数据失败:', error)
   } finally {
@@ -672,6 +650,7 @@ const handleShizhuSearch = (query) => {
 
 const handleSearch = () => {
   currentPage.value = 1
+  fetchData()
 }
 
 const handleReset = () => {
@@ -683,15 +662,18 @@ const handleReset = () => {
     prt: ''
   })
   currentPage.value = 1
+  fetchData()
 }
 
 const handleSizeChange = (val) => {
   pageSize.value = val
   currentPage.value = 1
+  fetchData()
 }
 
 const handleCurrentChange = (val) => {
   currentPage.value = val
+  fetchData()
 }
 
 const resetForm = () => {

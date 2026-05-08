@@ -10,6 +10,14 @@ from ..models.printer_template import PrinterTemplate
 from ..schemas.printer_template import PrinterTemplateCreate, PrinterTemplateUpdate, PrinterTemplateResponse
 from .auth import get_current_user
 
+def check_permission(user: User, permission: str) -> bool:
+    if user.role == "管理员":
+        return True
+    if user.permissions:
+        perms = [p.strip() for p in user.permissions.split(",")]
+        return permission in perms
+    return False
+
 UPLOAD_DIR = os.environ.get("TEMPLE_UPLOAD_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__)))), "uploads"))
 UPLOAD_DIR = os.path.join(UPLOAD_DIR, "templates")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -36,7 +44,7 @@ async def upload_template_image(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "管理员":
+    if not check_permission(current_user, "print_template"):
         raise HTTPException(status_code=403, detail="无权限操作")
     
     allowed_types = ["image/jpeg", "image/png", "image/gif", "image/bmp", "image/webp"]
@@ -78,7 +86,7 @@ async def rotate_template_image(
     data: dict,
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "管理员":
+    if not check_permission(current_user, "print_template"):
         raise HTTPException(status_code=403, detail="无权限操作")
 
     image_url = data.get("url", "")
@@ -143,7 +151,7 @@ async def create_template(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "管理员":
+    if not check_permission(current_user, "print_template"):
         raise HTTPException(status_code=403, detail="无权限操作")
     
     template = PrinterTemplate(**template_data.dict())
@@ -162,7 +170,7 @@ async def update_template(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "管理员":
+    if not check_permission(current_user, "print_template"):
         raise HTTPException(status_code=403, detail="无权限操作")
     
     result = await db.execute(select(PrinterTemplate).where(PrinterTemplate.id == template_id))
@@ -183,7 +191,7 @@ async def delete_template(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "管理员":
+    if not check_permission(current_user, "print_template"):
         raise HTTPException(status_code=403, detail="无权限操作")
     
     result = await db.execute(select(PrinterTemplate).where(PrinterTemplate.id == template_id))
@@ -201,7 +209,7 @@ async def set_default_template(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    if current_user.role != "管理员":
+    if not check_permission(current_user, "print_template"):
         raise HTTPException(status_code=403, detail="无权限操作")
     
     result = await db.execute(select(PrinterTemplate).where(PrinterTemplate.id == template_id))
@@ -225,7 +233,7 @@ async def cleanup_unused_images(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    if current_user.role != "管理员":
+    if not check_permission(current_user, "print_template"):
         raise HTTPException(status_code=403, detail="无权限操作")
 
     import json

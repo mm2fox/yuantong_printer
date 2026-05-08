@@ -48,7 +48,7 @@
                 <span>打印管理</span>
               </template>
               <el-menu-item index="/print">所有打印</el-menu-item>
-              <el-menu-item index="/print/templates" v-if="isAdmin">打印模板</el-menu-item>
+              <el-menu-item index="/print/templates" v-if="canManageTemplates">打印模板</el-menu-item>
             </el-sub-menu>
             
             <el-menu-item index="/system/user-data">
@@ -94,6 +94,10 @@ const activeMenu = computed(() => {
 
 const isAdmin = computed(() => {
   return userStore.userInfo?.role === '管理员'
+})
+
+const canManageTemplates = computed(() => {
+  return userStore.hasPermission('print_template')
 })
 
 const handleLogout = async () => {

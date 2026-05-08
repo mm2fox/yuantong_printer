@@ -590,24 +590,10 @@ import { ElMessage } from 'element-plus'
 import { fahuiRecordApi } from '@/api/fahuiRecords'
 import { fahuiInfoApi } from '@/api/fahuiInfo'
 import { fahuiUserApi } from '@/api/fahuiUsers'
-import { pinyin } from 'pinyin-pro'
-
-const pinyinMatch = (text, keyword) => {
-  if (!text || !keyword) return false
-  const str = String(text).toLowerCase()
-  const kw = keyword.toLowerCase()
-  if (str.includes(kw)) return true
-  if (!/[a-zA-Z]/.test(kw)) return false
-  const py = pinyin(str, { toneType: 'none', type: 'array' })
-  if (py.some(s => s.toLowerCase() === kw)) return true
-  const joined = py.join('').toLowerCase()
-  if (joined.includes(kw)) return true
-  return false
-}
 
 const loading = ref(false)
 const submitLoading = ref(false)
-const allData = ref([])
+const tableData = ref([])
 const fahuiList = ref([])
 const shizhuList = ref([])
 const shizhuLoading = ref(false)
@@ -630,45 +616,23 @@ const searchForm = reactive({
   end_date: ''
 })
 
-const filteredData = computed(() => {
-  let data = allData.value
-  
-  if (searchForm.shizhu_name) {
-    const keyword = searchForm.shizhu_name.toLowerCase()
-    data = data.filter(item => pinyinMatch(item.施主姓名, keyword))
-  }
-  if (searchForm.shizhu_code) {
-    const keyword = searchForm.shizhu_code.toLowerCase()
-    data = data.filter(item => item.施主编号?.toLowerCase().includes(keyword))
-  }
-  if (searchForm.phone) {
-    data = data.filter(item => item.电话?.includes(searchForm.phone))
-  }
-  if (searchForm.start_date) {
-    data = data.filter(item => item.djdate >= searchForm.start_date)
-  }
-  if (searchForm.end_date) {
-    data = data.filter(item => item.djdate <= searchForm.end_date)
-  }
-  
-  return data
-})
-
-const tableData = computed(() => {
-  const start = (currentPage.value - 1) * pageSize.value
-  const end = start + pageSize.value
-  total.value = filteredData.value.length
-  totalAmount.value = filteredData.value.reduce((sum, item) => sum + (item.amount || 0), 0)
-  return filteredData.value.slice(start, end)
-})
-
 const fetchData = async () => {
   loading.value = true
   try {
-    const res = await fahuiRecordApi.queryByShizhu({})
-    allData.value = res.records || []
-    total.value = allData.value.length
-    totalAmount.value = allData.value.reduce((sum, item) => sum + (item.amount || 0), 0)
+    const params = {
+      skip: (currentPage.value - 1) * pageSize.value,
+      limit: pageSize.value
+    }
+    if (searchForm.shizhu_name) params.shizhu_name = searchForm.shizhu_name
+    if (searchForm.shizhu_code) params.shizhu_code = searchForm.shizhu_code
+    if (searchForm.phone) params.phone = searchForm.phone
+    if (searchForm.start_date) params.start_date = searchForm.start_date
+    if (searchForm.end_date) params.end_date = searchForm.end_date
+
+    const res = await fahuiRecordApi.queryByShizhu(params)
+    tableData.value = res.records || []
+    total.value = res.total || 0
+    totalAmount.value = res.total_amount || 0
   } catch (error) {
     console.error('获取数据失败:', error)
   } finally {
@@ -678,6 +642,7 @@ const fetchData = async () => {
 
 const handleSearch = () => {
   currentPage.value = 1
+  fetchData()
 }
 
 const handleReset = () => {
@@ -689,15 +654,18 @@ const handleReset = () => {
     end_date: ''
   })
   currentPage.value = 1
+  fetchData()
 }
 
 const handleSizeChange = (val) => {
   pageSize.value = val
   currentPage.value = 1
+  fetchData()
 }
 
 const handleCurrentChange = (val) => {
   currentPage.value = val
+  fetchData()
 }
 
 const handleDetail = (row) => {
@@ -917,7 +885,7 @@ const fillNamesFromShizhu = (shizhu) => {
 
 const handleSubmit = async () => {
   if (!formRef.value) return
-  
+
   await formRef.value.validate(async (valid) => {
     if (valid) {
       submitLoading.value = true
@@ -990,7 +958,7 @@ const handleOpenAddFahui = () => {
 
 const handleSubmitAddFahui = async () => {
   if (!addFahuiFormRef.value) return
-  
+
   await addFahuiFormRef.value.validate(async (valid) => {
     if (valid) {
       addFahuiLoading.value = true
@@ -1078,7 +1046,7 @@ const handleOpenAddShizhu = async () => {
 
 const handleSubmitAddShizhu = async () => {
   if (!addShizhuFormRef.value) return
-  
+
   await addShizhuFormRef.value.validate(async (valid) => {
     if (valid) {
       addShizhuLoading.value = true
