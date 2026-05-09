@@ -12,6 +12,25 @@ import tempfile
 
 LOG_FILE = Path(tempfile.gettempdir()) / "temple_management.log"
 
+def load_build_version():
+    build_info_path = BASE_PATH / "build_info.json"
+    if build_info_path.exists():
+        try:
+            with open(build_info_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            version = data.get("version", "")
+            commit = data.get("git_commit", "")[:8]
+            branch = data.get("git_branch", "")
+            if version and commit:
+                return f"v{version} ({commit}) [{branch}]"
+            elif commit:
+                return f"commit:{commit} [{branch}]"
+        except Exception:
+            pass
+    return ""
+
+BUILD_VERSION = load_build_version()
+
 def log_message(msg):
     try:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
@@ -431,10 +450,14 @@ def create_tray_icon(url, show_window_callback, root):
         icon.stop()
         os._exit(0)
 
+    tray_tooltip = "缘通寺院信息管理系统"
+    if BUILD_VERSION:
+        tray_tooltip = f"缘通寺院信息管理系统 {BUILD_VERSION}"
+
     icon = pystray.Icon(
         "temple_management",
         create_icon_image(),
-        "缘通寺院信息管理系统",
+        tray_tooltip,
         menu=pystray.Menu(
             pystray.MenuItem("显示窗口", on_show, default=True),
             pystray.MenuItem("打开浏览器", on_open_browser),
@@ -451,7 +474,7 @@ def show_control_window(url):
 
     root = tk.Tk()
     root.title("缘通寺院信息管理系统")
-    root.geometry("360x220")
+    root.geometry("360x250")
     root.resizable(False, False)
     root.configure(bg="#f5f5f5")
 
@@ -465,7 +488,10 @@ def show_control_window(url):
     frame = tk.Frame(root, bg="#f5f5f5", padx=20, pady=15)
     frame.pack(fill="both", expand=True)
 
-    tk.Label(frame, text="缘通寺院信息管理系统", font=("Microsoft YaHei", 14, "bold"), bg="#f5f5f5", fg="#333").pack(pady=(0, 10))
+    tk.Label(frame, text="缘通寺院信息管理系统", font=("Microsoft YaHei", 14, "bold"), bg="#f5f5f5", fg="#333").pack(pady=(0, 5))
+
+    if BUILD_VERSION:
+        tk.Label(frame, text=BUILD_VERSION, font=("Microsoft YaHei", 9), bg="#f5f5f5", fg="#999").pack(pady=(0, 5))
 
     tk.Label(frame, text=f"访问地址: {url}", font=("Microsoft YaHei", 9), bg="#f5f5f5", fg="#666").pack(pady=(2, 10))
 
