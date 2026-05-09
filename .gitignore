@@ -51,3 +51,6 @@ check_excel.py
 /deploy/
 passwords.txt
 config.json
+
+# Pip packages cache
+pip_packages/

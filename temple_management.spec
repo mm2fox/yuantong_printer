@@ -14,7 +14,7 @@ a = Analysis(
     datas=[
         (os.path.join(PROJECT_ROOT, 'frontend', 'dist'), 'frontend/dist'),
         (os.path.join(PROJECT_ROOT, 'backend', 'app'), 'backend/app'),
-        (os.path.join(os.path.dirname(os.path.abspath('.')), 'yuantong_logo.ico'), '.'),
+        (os.path.join(PROJECT_ROOT, 'yuantong_logo.ico'), '.'),
         (os.path.join(PROJECT_ROOT, 'build_info.json'), '.'),
     ],
     hiddenimports=[
@@ -103,5 +103,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=os.path.join(os.path.dirname(os.path.abspath('.')), 'yuantong_logo.ico'),
+    icon=os.path.join(PROJECT_ROOT, 'yuantong_logo.ico'),
 )
