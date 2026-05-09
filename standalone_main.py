@@ -12,25 +12,6 @@ import tempfile
 
 LOG_FILE = Path(tempfile.gettempdir()) / "temple_management.log"
 
-def load_build_version():
-    build_info_path = BASE_PATH / "build_info.json"
-    if build_info_path.exists():
-        try:
-            with open(build_info_path, 'r', encoding='utf-8') as f:
-                data = json.load(f)
-            version = data.get("version", "")
-            commit = data.get("git_commit", "")[:8]
-            branch = data.get("git_branch", "")
-            if version and commit:
-                return f"v{version} ({commit}) [{branch}]"
-            elif commit:
-                return f"commit:{commit} [{branch}]"
-        except Exception:
-            pass
-    return ""
-
-BUILD_VERSION = load_build_version()
-
 def log_message(msg):
     try:
         with open(LOG_FILE, 'a', encoding='utf-8') as f:
@@ -62,6 +43,25 @@ FRONTEND_DIST = BASE_PATH / "frontend" / "dist"
 UPLOAD_DIR = DATA_PATH / "uploads"
 DB_DIR = DATA_PATH / "database"
 DB_PATH = DB_DIR / "temple.db"
+
+def load_build_version():
+    build_info_path = BASE_PATH / "build_info.json"
+    if build_info_path.exists():
+        try:
+            with open(build_info_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+            version = data.get("version", "")
+            commit = data.get("git_commit", "")[:8]
+            branch = data.get("git_branch", "")
+            if version and commit:
+                return f"v{version} ({commit}) [{branch}]"
+            elif commit:
+                return f"commit:{commit} [{branch}]"
+        except Exception:
+            pass
+    return ""
+
+BUILD_VERSION = load_build_version()
 
 log_message(f"BASE_PATH: {BASE_PATH}")
 log_message(f"FRONTEND_DIST: {FRONTEND_DIST}")

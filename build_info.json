@@ -1,10 +1,10 @@
 {
-  "git_commit": "425fbf452f3d679a82ae471b45f3436c2fdf8af4",
+  "git_commit": "e850c0f865f5139070eff2184410e0a31e8bd766",
   "git_branch": "main",
   "git_author": "mm2fox",
-  "git_message": "feat: 添加版本信息管理功能，打包时自动记录git信息",
-  "git_date": "2026-05-09 11:48:21 +0800",
-  "version": "425fbf4",
-  "build_time": "2026-05-09T11:49:25.101291",
-  "change_summary": "425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
+  "git_message": "feat: tkinter控制窗口和托盘显示版本信息",
+  "git_date": "2026-05-09 16:03:59 +0800",
+  "version": "e850c0f",
+  "build_time": "2026-05-09T16:04:58.889881",
+  "change_summary": "e850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
 }
