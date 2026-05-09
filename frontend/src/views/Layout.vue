@@ -65,6 +65,7 @@
               <el-menu-item index="/system/temples">寺庙管理</el-menu-item>
               <el-menu-item index="/system/logs">系统日志</el-menu-item>
               <el-menu-item index="/system/database">数据库管理</el-menu-item>
+              <el-menu-item index="/system/version">版本信息</el-menu-item>
             </el-sub-menu>
           </el-menu>
         </el-aside>

@@ -1,0 +1,10 @@
+{
+  "git_commit": "7a445b61f72aa4abdc195e84da9d6402f28333b8",
+  "git_branch": "main",
+  "git_author": "mm2fox",
+  "git_message": "feat: 实现打印模板权限管理和数据库查询优化",
+  "git_date": "2026-05-09 07:56:54 +0800",
+  "version": "7a445b6",
+  "build_time": "2026-05-09T11:35:28.661116",
+  "change_summary": "7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
+}

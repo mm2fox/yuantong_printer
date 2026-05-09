@@ -7,3 +7,4 @@ from .printer_templates import router as printer_templates_router
 from .permissions import router as permissions_router
 from .system_logs import router as system_logs_router
 from .database import router as database_router
+from .version_info import router as version_info_router

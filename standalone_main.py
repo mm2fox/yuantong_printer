@@ -5,6 +5,7 @@ import socket
 import threading
 import traceback
 import webbrowser
+import json
 from pathlib import Path
 import ctypes
 import tempfile
@@ -81,7 +82,8 @@ try:
         printer_templates_router,
         permissions_router,
         system_logs_router,
-        database_router
+        database_router,
+        version_info_router
     )
     from app.api.silent_print import router as silent_print_router
     from app.api.scanner import router as scanner_router
@@ -122,6 +124,7 @@ try:
     app.include_router(permissions_router)
     app.include_router(system_logs_router)
     app.include_router(database_router)
+    app.include_router(version_info_router)
     app.include_router(silent_print_router)
     app.include_router(scanner_router)
 
@@ -179,6 +182,7 @@ async def startup():
     await init_db()
     await _create_default_data()
     await _migrate_data()
+    await _import_build_info()
 
 async def _create_default_data():
     try:
@@ -269,6 +273,50 @@ async def _migrate_data():
                 log_message(f"已为 {len(users)} 个普通用户添加 print_template 权限")
     except Exception as e:
         log_message(f"数据迁移失败: {e}")
+        traceback.print_exc()
+
+async def _import_build_info():
+    try:
+        build_info_path = BASE_PATH / "build_info.json"
+        if not build_info_path.exists():
+            log_message("未找到 build_info.json，跳过版本信息导入")
+            return
+
+        with open(build_info_path, 'r', encoding='utf-8') as f:
+            build_data = json.load(f)
+
+        git_commit = build_data.get("git_commit", "")
+        if not git_commit or git_commit == "unknown":
+            log_message("构建信息中无有效 git commit，跳过版本信息导入")
+            return
+
+        from app.core.database import AsyncSessionLocal
+        from app.models.version_info import VersionInfo
+        from sqlalchemy import select
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(VersionInfo).where(VersionInfo.git_commit == git_commit)
+            )
+            existing = result.scalar_one_or_none()
+            if existing:
+                log_message(f"版本信息已存在 (commit: {git_commit[:8]})，跳过导入")
+                return
+
+            version = VersionInfo(
+                version=build_data.get("version", ""),
+                git_commit=git_commit,
+                git_branch=build_data.get("git_branch", ""),
+                git_author=build_data.get("git_author", ""),
+                git_message=build_data.get("git_message", ""),
+                git_date=build_data.get("git_date", ""),
+                change_summary=build_data.get("change_summary", ""),
+            )
+            session.add(version)
+            await session.commit()
+            log_message(f"版本信息导入成功: {build_data.get('version', '')} (commit: {git_commit[:8]})")
+    except Exception as e:
+        log_message(f"导入版本信息失败: {e}")
         traceback.print_exc()
 
 @app.get("/")

@@ -86,6 +86,12 @@ const routes = [
         meta: { title: '数据库管理', requiresAdmin: true }
       },
       {
+        path: 'system/version',
+        name: 'VersionInfo',
+        component: () => import('@/views/system/VersionInfo.vue'),
+        meta: { title: '版本信息', requiresAdmin: true }
+      },
+      {
         path: 'system/user-data',
         name: 'UserData',
         component: () => import('@/views/system/UserData.vue'),

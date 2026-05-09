@@ -14,7 +14,8 @@ from .api import (
     printer_templates_router,
     permissions_router,
     system_logs_router,
-    database_router
+    database_router,
+    version_info_router
 )
 from .api.silent_print import router as silent_print_router
 from .api.scanner import router as scanner_router
@@ -54,6 +55,7 @@ app.include_router(printer_templates_router)
 app.include_router(permissions_router)
 app.include_router(system_logs_router)
 app.include_router(database_router)
+app.include_router(version_info_router)
 app.include_router(silent_print_router)
 app.include_router(scanner_router)
 

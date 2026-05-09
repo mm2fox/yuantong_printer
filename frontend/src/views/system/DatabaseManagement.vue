@@ -217,10 +217,7 @@
           <el-descriptions-item label="失败">{{ importResult.fail_count }} 条</el-descriptions-item>
           <el-descriptions-item label="新增施主">{{ importResult.new_user_count }} 人</el-descriptions-item>
           <el-descriptions-item label="复用已有施主">{{ importResult.reuse_user_count }} 人</el-descriptions-item>
-          <el-descriptions-item label="关联法会">
-            {{ importResult.fahui_name }}
-            <el-tag v-if="importResult.fahui_created" type="success" size="small" style="margin-left: 5px;">新建</el-tag>
-          </el-descriptions-item>
+          <el-descriptions-item label="新建法会">{{ importResult.new_fahui_count }} 个</el-descriptions-item>
         </el-descriptions>
         <div v-if="importResult.errors && importResult.errors.length > 0" style="margin-top: 15px;">
           <h4 style="color: #F56C6C;">错误详情:</h4>

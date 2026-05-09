@@ -23,12 +23,16 @@ BACKUP_DIR = Path(os.environ.get("TEMPLE_BACKUP_DIR", str(Path(__file__).parent.
 EXCLUDED_TABLES = ['users', 'permissions']
 
 
+def _normalize_header(h):
+    return h.replace(' ', '').replace('\u3000', '') if h else ''
+
 def _read_excel_file(filepath: Path):
     if filepath.suffix.lower() == '.xls':
         import xlrd
         wb = xlrd.open_workbook(str(filepath))
         sh = wb.sheet_by_index(0)
-        headers = [sh.cell_value(0, j) for j in range(sh.ncols)]
+        raw_headers = [sh.cell_value(0, j) for j in range(sh.ncols)]
+        headers = [_normalize_header(h) for h in raw_headers]
         rows = []
         for i in range(1, sh.nrows):
             row = {}
@@ -47,7 +51,8 @@ def _read_excel_file(filepath: Path):
         wb.close()
         if not data:
             return [], []
-        headers = [str(h) if h is not None else '' for h in data[0]]
+        raw_headers = [str(h) if h is not None else '' for h in data[0]]
+        headers = [_normalize_header(h) for h in raw_headers]
         rows = []
         for row_data in data[1:]:
             row = {}
@@ -446,11 +451,15 @@ async def preview_excel(
         preview_rows = rows[:5]
 
         COLUMN_MAPPING = {
+            '法会编号': '法会编号 → 仅供参考',
+            '法会名称': '法会名称 → 自动创建/关联FahuiInfo',
+            '牌位类型': '牌位类型 → FahuiRecord.paiwei_type',
+            '功德金': '功德金 → FahuiRecord.amount',
             '施主编号': '施主编号 → FahuiUser.施主编号, FahuiRecord.施主编号',
             '施主姓名': '施主姓名 → FahuiUser.施主姓名, FahuiRecord.施主姓名',
             '座次': '座次 → FahuiRecord.座次',
             '往生/延生': '往生/延生 → FahuiRecord.yanwang (延生=0,往生=1)',
-            '已打印': '已打印 → FahuiRecord.prt (是=1,否=0)',
+            '已打印': '已打印 → FahuiRecord.prt (空或"是"=1,"否"=0)',
             '电话': '电话 → FahuiUser.电话',
             '佛光接引一': '佛光接引一 → FahuiUser.佛光接引一, 延生→xm1, 往生→xm1',
             '佛光接引二': '佛光接引二 → FahuiUser.佛光接引二, 延生→xm2, 往生→xm2',
@@ -526,46 +535,69 @@ async def import_excel(
         if not rows:
             raise HTTPException(status_code=400, detail="Excel文件中没有数据行")
 
-        fahui_result = await db.execute(
-            select(FahuiInfo).where(FahuiInfo.法会名称 == fahui_name, FahuiInfo.temple_id == temple_id)
-        )
-        fahui = fahui_result.scalar_one_or_none()
-        fahui_created = False
+        has_fahui_column = '法会名称' in headers
+        fahui_cache = {}
 
-        if fahui:
-            fahui_id = fahui.id
-            existing_remark = fahui.备注 or ''
-            if excel_filename not in existing_remark:
-                imported_files = [f.strip() for f in existing_remark.split(',') if f.strip()]
-                imported_files.append(excel_filename)
-                fahui.备注 = ','.join(imported_files)
-        else:
-            new_fahui = FahuiInfo(法会名称=fahui_name, 备注=excel_filename, temple_id=temple_id)
-            db.add(new_fahui)
-            await db.flush()
-            fahui_id = new_fahui.id
-            fahui_created = True
-
-        result_all = await db.execute(select(FahuiUser))
+        result_all = await db.execute(select(FahuiUser).where(FahuiUser.temple_id == temple_id))
         all_users = result_all.scalars().all()
         user_map = {}
         for u in all_users:
             if u.施主编号:
                 user_map[u.施主编号] = u
 
+        auto_id_counter = 0
+        existing_max = 0
+        for k in user_map.keys():
+            if k.startswith('IMP'):
+                try:
+                    num = int(k[3:])
+                    if num > existing_max:
+                        existing_max = num
+                except ValueError:
+                    pass
+
         success_count = 0
         fail_count = 0
         reuse_count = 0
         new_user_count = 0
+        new_fahui_count = 0
         errors = []
 
         for idx, row in enumerate(rows, start=2):
             try:
+                if has_fahui_column:
+                    fahui_name = str(row.get('法会名称', '')).strip() if row.get('法会名称') else ''
+                    if not fahui_name:
+                        fahui_name = '历史法会'
+                else:
+                    fahui_name = '历史法会'
+
+                if fahui_name not in fahui_cache:
+                    fahui_result = await db.execute(
+                        select(FahuiInfo).where(FahuiInfo.法会名称 == fahui_name, FahuiInfo.temple_id == temple_id)
+                    )
+                    fahui = fahui_result.scalar_one_or_none()
+                    if fahui:
+                        fahui_id = fahui.id
+                        existing_remark = fahui.备注 or ''
+                        if excel_filename not in existing_remark:
+                            imported_files = [f.strip() for f in existing_remark.split(',') if f.strip()]
+                            imported_files.append(excel_filename)
+                            fahui.备注 = ','.join(imported_files)
+                    else:
+                        new_fahui = FahuiInfo(法会名称=fahui_name, 备注=excel_filename, temple_id=temple_id)
+                        db.add(new_fahui)
+                        await db.flush()
+                        fahui_id = new_fahui.id
+                        new_fahui_count += 1
+                    fahui_cache[fahui_name] = fahui_id
+                else:
+                    fahui_id = fahui_cache[fahui_name]
+
                 shizhu_bianhao = str(row.get('施主编号', '')).strip() if row.get('施主编号') else ''
                 if not shizhu_bianhao:
-                    errors.append(f"第{idx}行: 缺少施主编号，跳过")
-                    fail_count += 1
-                    continue
+                    auto_id_counter += 1
+                    shizhu_bianhao = f'IMP{existing_max + auto_id_counter:06d}'
 
                 shizhu_xingming = str(row.get('施主姓名', '')).strip() if row.get('施主姓名') else ''
 
@@ -667,6 +699,17 @@ async def import_excel(
                 nianfen = str(row.get('年份', '')).strip() if row.get('年份') else ''
                 remarks_val = f'年份:{nianfen}' if nianfen else None
 
+                paiwei_type_val = row.get('牌位类型')
+                paiwei_type_str = str(paiwei_type_val).strip() if paiwei_type_val else None
+
+                amount_val = row.get('功德金')
+                amount_float = 0.0
+                if amount_val is not None:
+                    try:
+                        amount_float = float(amount_val)
+                    except (ValueError, TypeError):
+                        amount_float = 0.0
+
                 record = FahuiRecord(
                     fahui_user_id=fahui_user_id,
                     fahui_id=fahui_id,
@@ -678,6 +721,8 @@ async def import_excel(
                     经办人=str(row.get('登记人', '')).strip() if row.get('登记人') else None,
                     施主姓名=shizhu_xingming,
                     施主编号=shizhu_bianhao,
+                    paiwei_type=paiwei_type_str,
+                    amount=amount_float,
                     xm1=xm_fields.get('xm1'),
                     xm2=xm_fields.get('xm2'),
                     xm3=xm_fields.get('xm3'),
@@ -709,9 +754,7 @@ async def import_excel(
             "fail_count": fail_count,
             "new_user_count": new_user_count,
             "reuse_user_count": reuse_count,
-            "fahui_id": fahui_id,
-            "fahui_name": fahui_name,
-            "fahui_created": fahui_created,
+            "new_fahui_count": new_fahui_count,
             "errors": errors[:20]
         }
     except HTTPException:
