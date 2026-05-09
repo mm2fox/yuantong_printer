@@ -43,3 +43,6 @@ logs/
 
 # Uploads
 uploads/
+
+# Pip packages cache
+pip_packages/
