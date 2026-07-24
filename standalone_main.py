@@ -6,6 +6,7 @@ import threading
 import traceback
 import webbrowser
 import json
+import asyncio
 from pathlib import Path
 import ctypes
 import tempfile
@@ -37,8 +38,29 @@ def get_data_path():
         return Path(sys.executable).parent
     return Path(__file__).parent
 
+def load_config():
+    data_path = get_data_path()
+    config_path = data_path / "config.json"
+    default_config = {
+        "temple_name": "默认寺院",
+        "temple_address": "",
+        "admin_username": "admin",
+        "admin_password": "",
+        "admin_real_name": "管理员",
+        "port": 8080
+    }
+    if config_path.exists():
+        try:
+            with open(config_path, 'r', encoding='utf-8') as f:
+                custom_config = json.load(f)
+            return {**default_config, **custom_config}
+        except Exception as e:
+            log_message(f"加载配置文件失败，使用默认配置: {e}")
+    return default_config
+
 BASE_PATH = get_base_path()
 DATA_PATH = get_data_path()
+CONFIG = load_config()
 FRONTEND_DIST = BASE_PATH / "frontend" / "dist"
 UPLOAD_DIR = DATA_PATH / "uploads"
 DB_DIR = DATA_PATH / "database"
@@ -64,9 +86,12 @@ def load_build_version():
 BUILD_VERSION = load_build_version()
 
 log_message(f"BASE_PATH: {BASE_PATH}")
+log_message(f"DATA_PATH: {DATA_PATH}")
 log_message(f"FRONTEND_DIST: {FRONTEND_DIST}")
 log_message(f"UPLOAD_DIR: {UPLOAD_DIR}")
 log_message(f"DB_PATH: {DB_PATH}")
+log_message(f"配置信息 - 寺院名称: {CONFIG['temple_name']}")
+log_message(f"配置信息 - 监听端口: {CONFIG['port']}")
 
 DB_DIR.mkdir(parents=True, exist_ok=True)
 os.makedirs(os.path.join(str(UPLOAD_DIR), "templates"), exist_ok=True)
@@ -221,19 +246,33 @@ async def _create_default_data():
             from datetime import datetime
             now = datetime.now().isoformat()
 
+            temple_name = CONFIG.get("temple_name", "默认寺庙")
+            temple_address = CONFIG.get("temple_address", "")
+            admin_username = CONFIG.get("admin_username", "admin")
+            admin_password = CONFIG.get("admin_password", "")
+            admin_real_name = CONFIG.get("admin_real_name", "管理员")
+
+            if not admin_password:
+                import secrets
+                import string
+                admin_password = ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(10))
+                log_message(f"自动生成管理员密码: {admin_password} (请妥善保管，此信息仅出现在本次启动日志中)")
+            else:
+                log_message(f"使用配置文件中指定的管理员密码")
+
             await session.execute(text(
                 "INSERT INTO temples (寺庙名称, 寺庙地址, created_at, updated_at) "
-                "VALUES ('默认寺庙', '', :now, :now)"
-            ), {"now": now})
+                "VALUES (:name, :address, :now, :now)"
+            ), {"name": temple_name, "address": temple_address, "now": now})
 
             result = await session.execute(text("SELECT last_insert_rowid()"))
             temple_id = result.scalar()
 
-            password_hash = bcrypt.hashpw("admin123".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            password_hash = bcrypt.hashpw(admin_password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
             await session.execute(text(
                 "INSERT INTO users (username, password_hash, real_name, role, is_active, temple_id, created_at, updated_at) "
-                "VALUES ('admin', :pw, '管理员', '管理员', 1, :tid, :now, :now)"
-            ), {"pw": password_hash, "tid": temple_id, "now": now})
+                "VALUES (:username, :pw, :real_name, '管理员', 1, :tid, :now, :now)"
+            ), {"username": admin_username, "pw": password_hash, "real_name": admin_real_name, "tid": temple_id, "now": now})
 
             default_permissions = [
                 ('query', '查询', '查询法会和施主信息'),
@@ -250,10 +289,25 @@ async def _create_default_data():
                 ), {"name": name, "display_name": display_name, "desc": description, "now": now})
 
             await session.commit()
-            log_message("默认数据创建成功 - 默认管理员: admin / admin123")
+            log_message(f"默认数据创建成功 - 寺院: {temple_name}, 管理员: {admin_username}")
+            _clear_config_password()
     except Exception as e:
         log_message(f"创建默认数据失败: {e}")
         traceback.print_exc()
+
+def _clear_config_password():
+    try:
+        config_path = DATA_PATH / "config.json"
+        if config_path.exists():
+            with open(config_path, 'r', encoding='utf-8') as f:
+                cfg = json.load(f)
+            if cfg.get("admin_password"):
+                cfg["admin_password"] = ""
+                with open(config_path, 'w', encoding='utf-8') as f:
+                    json.dump(cfg, f, ensure_ascii=False, indent=2)
+                log_message("已清除 config.json 中的明文密码")
+    except Exception as e:
+        log_message(f"清除配置密码失败: {e}")
 
 async def _migrate_data():
     try:
@@ -377,6 +431,14 @@ def find_free_port():
         s.bind(('127.0.0.1', 0))
         return s.getsockname()[1]
 
+def is_port_available(port):
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.bind(('0.0.0.0', port))
+            return True
+    except OSError:
+        return False
+
 def wait_for_server(url, timeout=60):
     import urllib.request
     start_time = time.time()
@@ -392,18 +454,41 @@ def wait_for_server(url, timeout=60):
 _server_started = threading.Event()
 _server_error = [None]
 
+_server_port = [CONFIG['port']]
+
 def run_server():
     import uvicorn
     import logging
+
     try:
-        log_message("uvicorn.run 开始, host=0.0.0.0, port=8080")
-        logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s')
+        if sys.platform == 'win32':
+            asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+            log_message("已设置 WindowsSelectorEventLoopPolicy")
+
+        log_handler = logging.FileHandler(str(LOG_FILE), encoding='utf-8')
+        log_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
+
+        uvicorn_logger = logging.getLogger("uvicorn")
+        uvicorn_logger.setLevel(logging.INFO)
+        uvicorn_logger.addHandler(log_handler)
+
+        uvicorn_error_logger = logging.getLogger("uvicorn.error")
+        uvicorn_error_logger.setLevel(logging.INFO)
+        uvicorn_error_logger.addHandler(log_handler)
+
+        uvicorn_access_logger = logging.getLogger("uvicorn.access")
+        uvicorn_access_logger.setLevel(logging.INFO)
+        uvicorn_access_logger.addHandler(log_handler)
+
+        port = _server_port[0]
+        log_message(f"uvicorn.run 开始, host=0.0.0.0, port={port}, http=h11")
         uvicorn.run(
             app,
             host="0.0.0.0",
-            port=8080,
-            log_level="warning",
+            port=port,
+            log_level="info",
             log_config=None,
+            http="h11",
         )
     except Exception as e:
         _server_error[0] = e
@@ -537,26 +622,40 @@ if __name__ == "__main__":
         if last_error == ALREADY_EXISTS:
             log_message("检测到已有实例运行，打开浏览器后退出")
             local_ip = get_local_ip()
-            url = f"http://{local_ip}:8080"
-            webbrowser.open(url)
-            log_message(f"已打开浏览器: {url}")
+            for try_port in [8080, 8081, 8082, 8083, 8084, 8085]:
+                url = f"http://{local_ip}:{try_port}"
+                try:
+                    import urllib.request
+                    urllib.request.urlopen(f"http://127.0.0.1:{try_port}/health", timeout=2)
+                    webbrowser.open(url)
+                    log_message(f"已打开浏览器: {url}")
+                    break
+                except Exception:
+                    continue
             sys.exit(0)
 
         log_message("缘通寺院信息管理系统 启动中...")
 
+        server_port = CONFIG['port']
+        if not is_port_available(server_port):
+            log_message(f"端口 {server_port} 已被占用，正在寻找可用端口...")
+            server_port = find_free_port()
+            log_message(f"使用端口: {server_port}")
+
+        _server_port[0] = server_port
         local_ip = get_local_ip()
-        url = f"http://{local_ip}:8080"
+        url = f"http://{local_ip}:{server_port}"
 
         server_thread = threading.Thread(target=run_server, daemon=True)
         server_thread.start()
 
         log_message("服务器线程已启动, 等待HTTP响应...")
 
-        if not wait_for_server("http://127.0.0.1:8080"):
+        if not wait_for_server(f"http://127.0.0.1:{server_port}"):
             if _server_error[0]:
                 log_message(f"服务器启动错误: {_server_error[0]}")
             log_message("服务器启动失败!")
-            sys.exit(1)
+            os._exit(1)
 
         log_message(f"服务地址: {url}")
         log_message("正在打开浏览器...")

@@ -74,6 +74,7 @@
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button v-if="row.prt === 0" type="success" link @click="handlePrint(row)">打印</el-button>
+            <el-button v-if="row.prt === 1" type="warning" link @click="handleReprint(row)">重新打印</el-button>
             <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
@@ -104,16 +105,17 @@
       width="700px"
       destroy-on-close
     >
-      <div v-if="formData.fahui_name || formData.fahui_user_id" class="sticky-info">
+      <div class="sticky-info">
         <span v-if="formData.fahui_name" class="info-tag">
           <el-tag type="primary" size="large">{{ formData.fahui_name }}</el-tag>
         </span>
         <span v-if="selectedShizhuName" class="info-tag">
           <el-tag type="success" size="large">{{ selectedShizhuName }}</el-tag>
         </span>
-        <el-tag :type="formData.yanwang === '0' ? 'warning' : 'danger'" size="large">
+        <el-tag v-if="formData.yanwang === '0' || formData.yanwang === '1'" :type="formData.yanwang === '0' ? 'warning' : 'danger'" size="large">
           {{ formData.yanwang === '0' ? '延生' : '往生' }}
         </el-tag>
+        <el-button type="info" size="small" style="margin-left: auto;" @click="openPasteDialog">从Excel粘贴</el-button>
       </div>
 
       <el-form
@@ -314,6 +316,32 @@
       </template>
     </el-dialog>
     
+    <el-dialog
+      v-model="pasteDialogVisible"
+      title="从Excel粘贴数据"
+      width="600px"
+      destroy-on-close
+    >
+      <el-alert
+        type="info"
+        :closable="false"
+        style="margin-bottom: 12px;"
+      >
+        <div>请从Excel中复制一行数据（包含类型、牌位、金额、姓名等列），粘贴到下方文本框中。</div>
+        <div style="margin-top:4px; color:#909399; font-size:12px;">支持的列：类型 | 牌位 | 金额 | 每月放生姓名 | 姓名2 | 姓名3 | 姓名4 | 姓名5</div>
+      </el-alert>
+      <el-input
+        v-model="pasteText"
+        type="textarea"
+        :rows="5"
+        placeholder="在此处粘贴从Excel复制的行数据..."
+      />
+      <template #footer>
+        <el-button @click="pasteDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="handlePasteExcel">解析并填充</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog
       v-model="addFahuiDialogVisible"
       title="新增法会"
@@ -547,6 +575,8 @@ const shizhuSearchKeyword = ref('')
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
+const pasteDialogVisible = ref(false)
+const pasteText = ref('')
 
 const selectedShizhuName = computed(() => {
   if (!formData.fahui_user_id) return ''
@@ -803,6 +833,19 @@ const handlePrint = async (row) => {
   }
 }
 
+const handleReprint = async (row) => {
+  try {
+    await ElMessageBox.confirm('该排位已打印，确定要重新打印吗？', '重新打印确认', {
+      type: 'warning',
+      confirmButtonText: '确定',
+      cancelButtonText: '取消'
+    })
+    handlePrint(row)
+  } catch {
+    // cancelled
+  }
+}
+
 const handleFahuiSelect = (val) => {
   const fahui = fahuiList.value.find(item => item.法会名称 === val)
   if (fahui) {
@@ -873,6 +916,82 @@ const fillNamesFromShizhu = (shizhu) => {
     formData.xm9 = shizhu.阳上五 || ''
     formData.xm10 = shizhu.阳上六 || ''
   }
+}
+
+const openPasteDialog = () => {
+  pasteText.value = ''
+  pasteDialogVisible.value = true
+}
+
+const handlePasteExcel = () => {
+  const raw = pasteText.value.trim()
+  if (!raw) {
+    ElMessage.warning('请粘贴数据')
+    return
+  }
+
+  const lines = raw.split('\n')
+  const firstLine = lines[0]
+  const cols = firstLine.split('\t').map(c => c.trim())
+
+  if (cols.length < 9) {
+    ElMessage.warning('数据列数不足，请确保复制了完整的一行Excel数据（至少包含类型、牌位、金额、姓名等列）')
+    return
+  }
+
+  // C列(索引2): 类型
+  const type = cols[2]
+  if (type === '延生') {
+    formData.yanwang = '0'
+  } else if (type === '往生') {
+    formData.yanwang = '1'
+  }
+
+  // D列(索引3): 牌位
+  const paiwei = cols[3]
+  if (['大', '中', '小'].includes(paiwei)) {
+    formData.paiwei_type = paiwei + '牌'
+  } else if (['大牌', '中牌', '小牌'].includes(paiwei)) {
+    formData.paiwei_type = paiwei
+  }
+
+  // F列(索引5): 金额
+  const amountStr = cols[5]
+  if (amountStr && amountStr !== '长期' && !isNaN(parseFloat(amountStr))) {
+    formData.amount = parseFloat(amountStr)
+  }
+
+  // 清空姓名
+  formData.xm1 = ''
+  formData.xm2 = ''
+  formData.xm3 = ''
+  formData.xm4 = ''
+  formData.xm5 = ''
+  formData.xm6 = ''
+  formData.xm7 = ''
+  formData.xm8 = ''
+  formData.xm9 = ''
+  formData.xm10 = ''
+
+  // I~M列(索引8~12): 姓名
+  if (formData.yanwang === '0') {
+    // 延生：佛光注照1~5
+    formData.xm1 = cols[8] || ''
+    formData.xm2 = cols[9] || ''
+    formData.xm3 = cols[10] || ''
+    formData.xm4 = cols[11] || ''
+    formData.xm5 = cols[12] || ''
+  } else {
+    // 往生：佛光接引1~4，阳上1
+    formData.xm1 = cols[8] || ''
+    formData.xm2 = cols[9] || ''
+    formData.xm3 = cols[10] || ''
+    formData.xm4 = cols[11] || ''
+    formData.xm5 = cols[12] || ''
+  }
+
+  pasteDialogVisible.value = false
+  ElMessage.success('已根据Excel数据填充表单')
 }
 
 const handleSubmit = async () => {

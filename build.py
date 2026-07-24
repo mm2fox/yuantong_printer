@@ -70,6 +70,26 @@ def has_changes():
     status = run_git(["status", "--porcelain"])
     return bool(status.strip())
 
+def run_pyinstaller():
+    print("\n" + "=" * 50)
+    print("开始打包...")
+    print("=" * 50)
+    
+    spec_path = PROJECT_ROOT / "temple_management.spec"
+    cmd = ["pyinstaller", str(spec_path), "--clean"]
+    
+    print(f"执行命令: {' '.join(cmd)}")
+    result = subprocess.run(cmd, cwd=str(PROJECT_ROOT), capture_output=True, text=True, encoding="utf-8", errors="replace")
+    
+    if result.returncode == 0:
+        print("\n打包成功！")
+        print(f"输出目录: {PROJECT_ROOT / 'dist'}")
+        return True
+    else:
+        print("\n打包失败！")
+        print(f"错误信息:\n{result.stderr}")
+        return False
+
 def main():
     print("=" * 50)
     print("收集构建信息...")
@@ -111,6 +131,18 @@ def main():
     print(f"Git Date: {git_info['git_date']}")
     print(f"变更摘要:\n{change_summary}")
     print(f"\n构建信息已保存到: {output_path}")
+
+    run_pyinstaller()
+
+    print("\n" + "=" * 50)
+    print("构建完成！")
+    print("=" * 50)
+    print("下一步: 创建寺院部署包")
+    print("使用命令:")
+    print("  python create_temple_package.py <寺院名称> [选项]")
+    print("")
+    print("示例:")
+    print("  python create_temple_package.py 缘通寺 --address \"XX省XX市\" --password \"123456\"")
 
     return build_info
 

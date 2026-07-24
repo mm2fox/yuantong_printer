@@ -1,10 +1,10 @@
 {
-  "git_commit": "e850c0f865f5139070eff2184410e0a31e8bd766",
+  "git_commit": "efc4bedc0d5f16f663cc7a169111217afcafa3c8",
   "git_branch": "main",
   "git_author": "mm2fox",
-  "git_message": "feat: tkinter控制窗口和托盘显示版本信息",
-  "git_date": "2026-05-09 16:03:59 +0800",
-  "version": "e850c0f",
-  "build_time": "2026-05-09T16:04:58.889881",
-  "change_summary": "e850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
+  "git_message": "fix: 修复BASE_PATH未定义导致load_build_version报错",
+  "git_date": "2026-05-09 16:27:33 +0800",
+  "version": "efc4bed",
+  "build_time": "2026-07-23T20:19:11.051901",
+  "change_summary": "efc4bed fix: 修复BASE_PATH未定义导致load_build_version报错\ne850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
 }
