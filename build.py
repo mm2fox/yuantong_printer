@@ -70,6 +70,35 @@ def has_changes():
     status = run_git(["status", "--porcelain"])
     return bool(status.strip())
 
+def build_frontend():
+    """构建前端静态文件（npm run build）"""
+    print("\n" + "=" * 50)
+    print("构建前端...")
+    print("=" * 50)
+
+    frontend_dir = PROJECT_ROOT / "frontend"
+    cmd = ["npm", "run", "build"]
+
+    print(f"执行命令: {' '.join(cmd)} (目录: {frontend_dir})")
+    result = subprocess.run(
+        cmd,
+        cwd=str(frontend_dir),
+        shell=True,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace"
+    )
+
+    if result.returncode == 0:
+        print("前端构建成功！")
+        return True
+    else:
+        print("前端构建失败！")
+        print(f"错误信息:\n{result.stderr}")
+        return False
+
+
 def run_pyinstaller():
     print("\n" + "=" * 50)
     print("开始打包...")
@@ -131,6 +160,10 @@ def main():
     print(f"Git Date: {git_info['git_date']}")
     print(f"变更摘要:\n{change_summary}")
     print(f"\n构建信息已保存到: {output_path}")
+
+    if not build_frontend():
+        print("前端构建失败，终止打包")
+        return None
 
     run_pyinstaller()
 

@@ -7,13 +7,13 @@
       
       <el-form :model="searchForm" inline class="search-form">
         <el-form-item label="施主姓名">
-          <el-input v-model="searchForm.shizhu_name" placeholder="输入姓名" style="width: 120px" clearable />
+          <el-input v-model="searchForm.shizhu_name" placeholder="输入姓名" style="width: 150px" clearable />
         </el-form-item>
         <el-form-item label="施主编号">
-          <el-input v-model="searchForm.shizhu_code" placeholder="输入编号" style="width: 120px" clearable />
+          <el-input v-model="searchForm.shizhu_code" placeholder="输入编号" style="width: 150px" clearable />
         </el-form-item>
         <el-form-item label="电话">
-          <el-input v-model="searchForm.phone" placeholder="输入电话" style="width: 120px" clearable />
+          <el-input v-model="searchForm.phone" placeholder="输入电话" style="width: 150px" clearable />
         </el-form-item>
         <el-form-item label="登记日期">
           <el-date-picker
@@ -56,10 +56,11 @@
           </template>
         </el-table-column>
         <el-table-column prop="djdate" label="登记日期" width="110" />
-        <el-table-column label="操作" width="140">
+        <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
             <el-button type="warning" link @click="handleAdd(row)">新增登记</el-button>
+            <el-button type="success" link @click="handleManage(row)">管理</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -587,9 +588,13 @@
 <script setup>
 import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
 import { fahuiRecordApi } from '@/api/fahuiRecords'
 import { fahuiInfoApi } from '@/api/fahuiInfo'
 import { fahuiUserApi } from '@/api/fahuiUsers'
+
+const route = useRoute()
+const router = useRouter()
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -671,6 +676,10 @@ const handleCurrentChange = (val) => {
 const handleDetail = (row) => {
   detailData.value = row
   detailVisible.value = true
+}
+
+const handleManage = (row) => {
+  router.push({ path: '/shizhu', query: { keyword: row.施主编号 } })
 }
 
 const fetchFahuiList = async () => {
@@ -1071,6 +1080,12 @@ const handleSubmitAddShizhu = async () => {
 }
 
 onMounted(() => {
+  if (route.query.shizhu_name) {
+    searchForm.shizhu_name = route.query.shizhu_name
+  }
+  if (route.query.shizhu_code) {
+    searchForm.shizhu_code = route.query.shizhu_code
+  }
   fetchData()
   fetchFahuiList()
 })

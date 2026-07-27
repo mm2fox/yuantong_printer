@@ -15,10 +15,10 @@
           </el-select>
         </el-form-item>
         <el-form-item label="施主姓名">
-          <el-input v-model="searchForm.shizhu_name" placeholder="输入姓名" clearable style="width: 120px" />
+          <el-input v-model="searchForm.shizhu_name" placeholder="输入姓名" clearable style="width: 150px" />
         </el-form-item>
         <el-form-item label="施主编号">
-          <el-input v-model="searchForm.shizhu_code" placeholder="输入编号" clearable style="width: 120px" />
+          <el-input v-model="searchForm.shizhu_code" placeholder="输入编号" clearable style="width: 150px" />
         </el-form-item>
         <el-form-item label="日期范围">
           <el-date-picker
@@ -38,20 +38,20 @@
           />
         </el-form-item>
         <el-form-item label="牌位类型">
-          <el-select v-model="searchForm.paiwei_type" clearable placeholder="全部" style="width: 100px">
+          <el-select v-model="searchForm.paiwei_type" clearable placeholder="全部" style="width: 120px">
             <el-option label="大牌" value="大牌" />
             <el-option label="中牌" value="中牌" />
             <el-option label="小牌" value="小牌" />
           </el-select>
         </el-form-item>
         <el-form-item label="类型">
-          <el-select v-model="searchForm.yanwang" clearable placeholder="全部" style="width: 100px">
+          <el-select v-model="searchForm.yanwang" clearable placeholder="全部" style="width: 120px">
             <el-option label="延生" value="0" />
             <el-option label="往生" value="1" />
           </el-select>
         </el-form-item>
         <el-form-item label="打印状态">
-          <el-select v-model="searchForm.prt" clearable placeholder="全部" style="width: 100px">
+          <el-select v-model="searchForm.prt" clearable placeholder="全部" style="width: 120px">
             <el-option label="未打印" value="0" />
             <el-option label="已打印" value="1" />
           </el-select>
@@ -100,6 +100,7 @@
           <template #default="{ row }">
             <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
             <el-button v-if="row.prt === 0" type="success" link @click="handlePrint(row)">打印</el-button>
+            <el-button v-if="row.prt === 1" type="warning" link @click="handlePrint(row)">重新打印</el-button>
             <el-button type="warning" link @click="handleAdd(row)">新增登记</el-button>
             <el-button type="info" link @click="handleEdit(row)">修改</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>

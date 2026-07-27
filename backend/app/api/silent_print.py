@@ -158,12 +158,14 @@ def split_name_suffix(name):
     if not name:
         return '', ''
     name = name.strip()
-    last_space_idx = name.rfind(' ')
-    if last_space_idx >= 0:
-        name_part = name[:last_space_idx].replace(' ', '')
-        suffix = name[last_space_idx + 1:]
+    # 用第一个空格分割：空格前为姓名（需对齐），空格后为后缀（如"阖家 长生"）
+    first_space_idx = name.find(' ')
+    if first_space_idx >= 0:
+        name_part = name[:first_space_idx]
+        # 后缀中的空格转为全角空格，在竖排时作为间隔
+        suffix = name[first_space_idx + 1:].replace(' ', '\u3000')
         return name_part, suffix
-    return name.replace(' ', ''), ''
+    return name, ''
 
 
 def pad_name_part(name_part, max_len):

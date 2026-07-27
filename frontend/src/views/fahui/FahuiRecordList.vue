@@ -12,25 +12,29 @@
         <el-select v-model="searchForm.fahui_name" placeholder="法会名称" clearable style="width: 150px" @change="handleSearch">
           <el-option v-for="item in fahuiList" :key="item.id" :label="item.法会名称" :value="item.法会名称" />
         </el-select>
-        <el-input v-model="searchForm.shizhu_name" placeholder="施主姓名" clearable style="width: 120px; margin-left: 10px" @keyup.enter="handleSearch" />
-        <el-select v-model="searchForm.paiwei_type" placeholder="牌位类型" clearable style="width: 100px; margin-left: 10px" @change="handleSearch">
+        <el-input v-model="searchForm.shizhu_name" placeholder="施主姓名" clearable style="width: 150px; margin-left: 10px" @keyup.enter="handleSearch" />
+        <el-select v-model="searchForm.paiwei_type" placeholder="牌位类型" clearable style="width: 120px; margin-left: 10px" @change="handleSearch">
           <el-option label="大牌" value="大牌" />
           <el-option label="中牌" value="中牌" />
           <el-option label="小牌" value="小牌" />
         </el-select>
-        <el-select v-model="searchForm.yanwang" placeholder="类型" clearable style="width: 90px; margin-left: 10px" @change="handleSearch">
+        <el-select v-model="searchForm.yanwang" placeholder="类型" clearable style="width: 120px; margin-left: 10px" @change="handleSearch">
           <el-option label="延生" value="0" />
           <el-option label="往生" value="1" />
         </el-select>
-        <el-select v-model="searchForm.prt" placeholder="打印状态" clearable style="width: 100px; margin-left: 10px" @change="handleSearch">
+        <el-select v-model="searchForm.prt" placeholder="打印状态" clearable style="width: 120px; margin-left: 10px" @change="handleSearch">
           <el-option label="未打印" value="0" />
           <el-option label="已打印" value="1" />
         </el-select>
         <el-button type="primary" style="margin-left: 10px" @click="handleSearch">搜索</el-button>
         <el-button @click="handleReset">重置</el-button>
+        <el-button type="danger" :disabled="selectedRows.length === 0" style="margin-left: 10px" @click="handleBatchDelete">
+          批量删除<template v-if="selectedRows.length > 0"> ({{ selectedRows.length }})</template>
+        </el-button>
       </div>
-      
-      <el-table :data="tableData" v-loading="loading" stripe max-height="500">
+
+      <el-table :data="tableData" v-loading="loading" stripe max-height="500" @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="座次" label="座次" width="70" />
         <el-table-column prop="施主编号" label="施主编号" width="120" />
         <el-table-column prop="施主姓名" label="施主姓名" width="100" />
@@ -577,6 +581,7 @@ const isEdit = ref(false)
 const formRef = ref(null)
 const pasteDialogVisible = ref(false)
 const pasteText = ref('')
+const selectedRows = ref([])
 
 const selectedShizhuName = computed(() => {
   if (!formData.fahui_user_id) return ''
@@ -781,6 +786,30 @@ const handleDelete = async (row) => {
   } catch (error) {
     if (error !== 'cancel') {
       console.error('删除失败:', error)
+    }
+  }
+}
+
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
+
+const handleBatchDelete = async () => {
+  try {
+    await ElMessageBox.confirm(`确定要删除选中的 ${selectedRows.value.length} 条记录吗？`, '提示', {
+      type: 'warning'
+    })
+    const ids = selectedRows.value.map(row => row.id)
+    for (const id of ids) {
+      await fahuiRecordApi.delete(id)
+    }
+    ElMessage.success(`成功删除 ${ids.length} 条记录`)
+    selectedRows.value = []
+    fetchData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量删除失败:', error)
+      ElMessage.error('批量删除失败')
     }
   }
 }

@@ -16,15 +16,19 @@
           clearable
           @keyup.enter="handleSearch"
         />
-        <el-select v-model="searchGongdezhu" placeholder="功德主" clearable style="width: 100px; margin-left: 10px" @change="handleSearch">
+        <el-select v-model="searchGongdezhu" placeholder="功德主" clearable style="width: 120px; margin-left: 10px" @change="handleSearch">
           <el-option label="是" value="1" />
           <el-option label="否" value="0" />
         </el-select>
         <el-button type="primary" style="margin-left: 10px" @click="handleSearch">搜索</el-button>
         <el-button @click="handleReset">重置</el-button>
+        <el-button type="danger" :disabled="selectedRows.length === 0" style="margin-left: 10px" @click="handleBatchDelete">
+          批量删除<template v-if="selectedRows.length > 0"> ({{ selectedRows.length }})</template>
+        </el-button>
       </div>
-      
-      <el-table :data="tableData" v-loading="loading" stripe>
+
+      <el-table :data="tableData" v-loading="loading" stripe @selection-change="handleSelectionChange">
+        <el-table-column type="selection" width="45" />
         <el-table-column prop="施主编号" label="施主编号" width="120" />
         <el-table-column prop="施主姓名" label="施主姓名" width="120">
           <template #default="{ row }">
@@ -72,7 +76,7 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button type="primary" link @click="handleViewRecords(row)">记录</el-button>
+            <el-button type="success" link @click="handleQuery(row)">查询</el-button>
             <el-button type="primary" link @click="handleEdit(row)">编辑</el-button>
             <el-button type="danger" link @click="handleDelete(row)">删除</el-button>
           </template>
@@ -243,59 +247,17 @@
         <el-button type="primary" @click="handleSubmit" :loading="submitLoading">确定</el-button>
       </template>
     </el-dialog>
-    
-    <el-dialog
-      v-model="recordsDialogVisible"
-      :title="`施主【${currentShizhu.施主姓名}】的法会记录`"
-      width="900px"
-    >
-      <el-table :data="shizhuRecords" v-loading="recordsLoading" stripe max-height="400">
-        <el-table-column prop="fahui_name" label="法会名称" width="120" />
-        <el-table-column prop="paiwei_type" label="牌位类型" width="80" />
-        <el-table-column prop="amount" label="金额" width="100">
-          <template #default="{ row }">
-            {{ row.amount?.toFixed(2) }} 元
-          </template>
-        </el-table-column>
-        <el-table-column prop="yanwang" label="类型" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.yanwang === 0 ? 'success' : 'danger'">
-              {{ row.yanwang === 0 ? '延生' : '往生' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="djdate" label="登记日期" width="110" />
-        <el-table-column prop="经办人" label="经办人" width="80">
-          <template #default="{ row }">
-            {{ row.经办人 || '-' }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="prt" label="打印状态" width="80">
-          <template #default="{ row }">
-            <el-tag :type="row.prt === 1 ? 'success' : 'info'">
-              {{ row.prt === 1 ? '已打印' : '未打印' }}
-            </el-tag>
-          </template>
-        </el-table-column>
-        <el-table-column prop="remarks" label="备注" min-width="100">
-          <template #default="{ row }">
-            {{ row.remarks || '-' }}
-          </template>
-        </el-table-column>
-      </el-table>
-      <div class="records-statistics">
-        <span>共 {{ shizhuRecords.length }} 条记录</span>
-        <span style="margin-left: 20px">金额合计: {{ recordsTotalAmount.toFixed(2) }} 元</span>
-      </div>
-    </el-dialog>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRoute, useRouter } from 'vue-router'
 import { fahuiUserApi } from '@/api/fahuiUsers'
-import { fahuiRecordApi } from '@/api/fahuiRecords'
+
+const route = useRoute()
+const router = useRouter()
 
 const loading = ref(false)
 const submitLoading = ref(false)
@@ -307,19 +269,11 @@ const isEdit = ref(false)
 const formRef = ref(null)
 const editingRowId = ref(null)
 const editInputRef = ref(null)
-
-const recordsDialogVisible = ref(false)
-const recordsLoading = ref(false)
-const shizhuRecords = ref([])
-const currentShizhu = ref({})
+const selectedRows = ref([])
 
 const currentPage = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
-
-const recordsTotalAmount = computed(() => {
-  return shizhuRecords.value.reduce((sum, item) => sum + (item.amount || 0), 0)
-})
 
 const formData = reactive({
   id: null,
@@ -464,6 +418,30 @@ const handleDelete = async (row) => {
   }
 }
 
+const handleSelectionChange = (rows) => {
+  selectedRows.value = rows
+}
+
+const handleBatchDelete = async () => {
+  try {
+    await ElMessageBox.confirm(`确定要删除选中的 ${selectedRows.value.length} 个施主吗？`, '提示', {
+      type: 'warning'
+    })
+    const ids = selectedRows.value.map(row => row.id)
+    for (const id of ids) {
+      await fahuiUserApi.delete(id)
+    }
+    ElMessage.success(`成功删除 ${ids.length} 个施主`)
+    selectedRows.value = []
+    fetchData()
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error('批量删除失败:', error)
+      ElMessage.error('批量删除失败')
+    }
+  }
+}
+
 const enableEdit = (row) => {
   editingRowId.value = row.id
 }
@@ -484,19 +462,8 @@ const handleInlineEdit = async (row) => {
   }
 }
 
-const handleViewRecords = async (row) => {
-  currentShizhu.value = row
-  recordsDialogVisible.value = true
-  recordsLoading.value = true
-  try {
-    const res = await fahuiRecordApi.queryByShizhu({ shizhu_code: row.施主编号 })
-    shizhuRecords.value = res.records || []
-  } catch (error) {
-    console.error('获取记录失败:', error)
-    ElMessage.error('获取法会记录失败')
-  } finally {
-    recordsLoading.value = false
-  }
+const handleQuery = (row) => {
+  router.push({ path: '/query/shizhu', query: { shizhu_name: row.施主姓名, shizhu_code: row.施主编号 } })
 }
 
 const handleSubmit = async () => {
@@ -525,7 +492,19 @@ const handleSubmit = async () => {
 }
 
 onMounted(() => {
+  if (route.query.keyword) {
+    searchKeyword.value = route.query.keyword
+    currentPage.value = 1
+  }
   fetchData()
+})
+
+// 监听路由参数变化（从施主查询跳转过来时生效）
+watch(() => route.query.keyword, (newKeyword) => {
+  if (newKeyword !== undefined) {
+    searchKeyword.value = newKeyword || ''
+    currentPage.value = 1
+  }
 })
 </script>
 
@@ -550,14 +529,6 @@ onMounted(() => {
   margin-top: 15px;
   display: flex;
   justify-content: flex-end;
-}
-
-.records-statistics {
-  margin-top: 15px;
-  padding: 10px;
-  background: #f5f7fa;
-  border-radius: 4px;
-  color: #606266;
 }
 
 .no-border-input :deep(.el-input__wrapper) {

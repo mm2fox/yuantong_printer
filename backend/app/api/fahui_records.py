@@ -301,12 +301,17 @@ async def update_fahui_record(
     if not record:
         raise HTTPException(status_code=404, detail="记录不存在")
     
-    for key, value in record_data.dict(exclude_unset=True).items():
+    update_data = record_data.dict(exclude_unset=True)
+    for key, value in update_data.items():
         setattr(record, key, value)
-    
+
+    # 编辑记录数据时自动更新经办人为当前操作用户（仅更新打印状态时不改经办人）
+    if any(key != 'prt' for key in update_data.keys()):
+        record.经办人 = current_user.username
+
     await db.commit()
     await db.refresh(record)
-    
+
     log = SystemLog(
         用户名=current_user.username,
         操作类型="修改",
