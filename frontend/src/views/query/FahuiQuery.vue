@@ -96,7 +96,7 @@
             </el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="270">
+        <el-table-column label="操作" width="340" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleDetail(row)">详情</el-button>
             <el-button v-if="row.prt === 0" type="success" link @click="handlePrint(row)">打印</el-button>
