@@ -241,15 +241,23 @@
           <el-col :span="12">
             <el-form-item label="施主" prop="fahui_user_id">
               <div style="display: flex; gap: 8px;">
-                <el-select-v2
+                <el-select
                   v-model="formData.fahui_user_id"
-                  :options="shizhuOptions"
                   filterable
+                  remote
+                  :remote-method="handleShizhuSearch"
                   :loading="shizhuLoading"
-                  placeholder="搜索选择施主"
+                  placeholder="输入姓名/编号搜索"
                   style="flex: 1"
                   @change="handleShizhuSelect"
-                />
+                >
+                  <el-option
+                    v-for="item in shizhuList"
+                    :key="item.id"
+                    :label="item.施主姓名 ? `${item.施主姓名} (${item.施主编号})` : item.施主编号"
+                    :value="item.id"
+                  />
+                </el-select>
                 <el-button type="primary" @click="handleOpenAddShizhu">新增</el-button>
               </div>
             </el-form-item>
@@ -939,7 +947,7 @@ const formRules = {
 const selectedShizhuName = computed(() => {
   if (!formData.fahui_user_id) return ''
   const shizhu = shizhuList.value.find(item => item.id === formData.fahui_user_id)
-  return shizhu ? `${shizhu.施主姓名} (${shizhu.施主编号})` : ''
+  return shizhu ? (shizhu.施主姓名 ? `${shizhu.施主姓名} (${shizhu.施主编号})` : shizhu.施主编号) : ''
 })
 
 const shizhuOptions = computed(() =>
@@ -952,7 +960,7 @@ const shizhuOptions = computed(() =>
 const fetchShizhuList = async (keyword = '') => {
   shizhuLoading.value = true
   try {
-    const res = await fahuiUserApi.getList(keyword || undefined, 10000)
+    const res = await fahuiUserApi.getList(keyword || undefined, 50)
     shizhuList.value = res
   } catch (error) {
     console.error('获取施主列表失败:', error)

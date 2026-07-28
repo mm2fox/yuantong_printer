@@ -152,15 +152,23 @@
           <el-col :span="12">
             <el-form-item label="施主" prop="fahui_user_id">
               <div style="display: flex; gap: 8px;">
-                <el-select-v2
+                <el-select
                   v-model="formData.fahui_user_id"
-                  :options="shizhuOptions"
                   filterable
+                  remote
+                  :remote-method="handleShizhuSearch"
                   :loading="shizhuLoading"
-                  placeholder="搜索选择施主"
+                  placeholder="输入姓名/编号搜索"
                   style="flex: 1"
                   @change="handleShizhuSelect"
-                />
+                >
+                  <el-option
+                    v-for="item in shizhuList"
+                    :key="item.id"
+                    :label="item.施主姓名 ? `${item.施主姓名} (${item.施主编号})` : item.施主编号"
+                    :value="item.id"
+                  />
+                </el-select>
                 <el-button type="primary" @click="handleOpenAddShizhu">新增</el-button>
               </div>
             </el-form-item>
@@ -578,7 +586,7 @@ const selectedRows = ref([])
 const selectedShizhuName = computed(() => {
   if (!formData.fahui_user_id) return ''
   const shizhu = shizhuList.value.find(item => item.id === formData.fahui_user_id)
-  return shizhu ? `${shizhu.施主姓名} (${shizhu.施主编号})` : ''
+  return shizhu ? (shizhu.施主姓名 ? `${shizhu.施主姓名} (${shizhu.施主编号})` : shizhu.施主编号) : ''
 })
 
 const shizhuOptions = computed(() =>
@@ -668,7 +676,7 @@ const fetchFahuiList = async () => {
 const fetchShizhuList = async (keyword = '') => {
   shizhuLoading.value = true
   try {
-    const res = await fahuiUserApi.getList(keyword || undefined, 10000)
+    const res = await fahuiUserApi.getList(keyword || undefined, 50)
     shizhuList.value = res
   } catch (error) {
     console.error('获取施主列表失败:', error)
@@ -777,6 +785,28 @@ const handleEdit = async (row) => {
     prt: String(row.prt),
     remarks: row.remarks
   })
+  // 确保当前施主在列表中，否则 el-select 无法回显 label
+  if (row.fahui_user_id && !shizhuList.value.find(item => item.id === row.fahui_user_id)) {
+    shizhuList.value.unshift({
+      id: row.fahui_user_id,
+      施主编号: row.施主编号 || '',
+      施主姓名: row.施主姓名 || '',
+      佛光注照一: row.xm1 || '',
+      佛光注照二: row.xm2 || '',
+      佛光注照三: row.xm3 || '',
+      佛光注照四: row.xm4 || '',
+      佛光接引一: row.xm1 || '',
+      佛光接引二: row.xm2 || '',
+      佛光接引三: row.xm3 || '',
+      佛光接引四: row.xm4 || '',
+      阳上一: row.xm5 || '',
+      阳上二: row.xm6 || '',
+      阳上三: row.xm7 || '',
+      阳上四: row.xm8 || '',
+      阳上五: row.xm9 || '',
+      阳上六: row.xm10 || ''
+    })
+  }
   dialogVisible.value = true
 }
 
