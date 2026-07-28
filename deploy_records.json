@@ -8,7 +8,7 @@
       "port": 8080,
       "package_path": "E:\\Project\\Print_tool\\temple-management\\deploy\\伽蓝寺",
       "created_at": "2026-07-23T15:24:49.680747",
-      "updated_at": "2026-07-28T09:03:03.376388"
+      "updated_at": "2026-07-28T09:17:17.762863"
     },
     {
       "temple_name": "国庆寺",
@@ -18,7 +18,7 @@
       "port": 8080,
       "package_path": "E:\\Project\\Print_tool\\temple-management\\deploy\\国庆寺",
       "created_at": "2026-07-27T09:52:31.249294",
-      "updated_at": "2026-07-28T09:03:03.250721"
+      "updated_at": "2026-07-28T09:17:17.638554"
     }
   ]
 }

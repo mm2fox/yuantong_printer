@@ -623,7 +623,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { fahuiRecordApi } from '@/api/fahuiRecords'
 import { fahuiInfoApi } from '@/api/fahuiInfo'
@@ -813,6 +813,10 @@ const handleEdit = async (row) => {
   }
   // 先加载施主列表，确保下拉框有数据
   await fetchShizhuList()
+  // 先打开弹窗，让 el-select 渲染
+  dialogVisible.value = true
+  // 等待弹窗渲染完成后再设置表单值，确保 el-select 能正确显示选中项
+  await nextTick()
   const fahui = fahuiList.value.find(item => item.法会名称 === row.fahui_name)
   Object.assign(formData, {
     id: row.id,
@@ -857,7 +861,6 @@ const handleEdit = async (row) => {
       阳上六: row.xm10 || ''
     })
   }
-  dialogVisible.value = true
 }
 
 const handleDelete = async (row) => {
@@ -1018,6 +1021,10 @@ const handleAdd = async (row) => {
   }
   // 先加载施主列表，确保下拉框有数据
   await fetchShizhuList()
+  // 先打开弹窗，让 el-select 渲染
+  dialogVisible.value = true
+  // 等待弹窗渲染完成后再设置表单值，确保 el-select 能正确显示选中项
+  await nextTick()
   if (row) {
     const fahui = fahuiList.value.find(item => item.法会名称 === row.fahui_name)
     Object.assign(formData, {
@@ -1061,7 +1068,6 @@ const handleAdd = async (row) => {
       })
     }
   }
-  dialogVisible.value = true
 }
 
 const handleFahuiSelect = (val) => {
