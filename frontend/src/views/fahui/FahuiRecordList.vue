@@ -155,8 +155,6 @@
                 <el-select
                   v-model="formData.fahui_user_id"
                   filterable
-                  remote
-                  :remote-method="handleShizhuSearch"
                   :loading="shizhuLoading"
                   placeholder="搜索选择施主"
                   style="flex: 1"
@@ -669,7 +667,7 @@ const fetchFahuiList = async () => {
 const fetchShizhuList = async (keyword = '') => {
   shizhuLoading.value = true
   try {
-    const res = await fahuiUserApi.getList(keyword || undefined, 50)
+    const res = await fahuiUserApi.getList(keyword || undefined, 10000)
     shizhuList.value = res
   } catch (error) {
     console.error('获取施主列表失败:', error)
@@ -738,16 +736,23 @@ const resetForm = () => {
   })
 }
 
-const handleAdd = () => {
+const handleAdd = async () => {
   resetForm()
   isEdit.value = false
+  if (fahuiList.value.length === 0) {
+    await fetchFahuiList()
+  }
+  await fetchShizhuList()
   dialogVisible.value = true
-  fetchShizhuList()
 }
 
-const handleEdit = (row) => {
+const handleEdit = async (row) => {
   resetForm()
   isEdit.value = true
+  if (fahuiList.value.length === 0) {
+    await fetchFahuiList()
+  }
+  await fetchShizhuList()
   Object.assign(formData, {
     id: row.id,
     fahui_id: row.fahui_id,
@@ -772,7 +777,6 @@ const handleEdit = (row) => {
     remarks: row.remarks
   })
   dialogVisible.value = true
-  fetchShizhuList()
 }
 
 const handleDelete = async (row) => {

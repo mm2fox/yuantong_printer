@@ -305,14 +305,6 @@ const formRules = {
 
 const filteredData = computed(() => {
   let data = allData.value
-  if (searchKeyword.value) {
-    const keyword = searchKeyword.value.toLowerCase()
-    data = data.filter(item => 
-      item.施主姓名?.toLowerCase().includes(keyword) ||
-      item.施主编号?.toLowerCase().includes(keyword) ||
-      item.电话?.includes(keyword)
-    )
-  }
   if (searchGongdezhu.value !== '' && searchGongdezhu.value !== null) {
     data = data.filter(item => item.功德主 === parseInt(searchGongdezhu.value))
   }
@@ -329,9 +321,11 @@ const tableData = computed(() => {
 const fetchData = async () => {
   loading.value = true
   try {
-    const res = await fahuiUserApi.getList(undefined, 500)
+    // 关键词非空时走服务端搜索（可返回老记录），无关键词时只取最新 500 条
+    const keyword = searchKeyword.value && searchKeyword.value.trim() ? searchKeyword.value.trim() : undefined
+    const res = await fahuiUserApi.getList(keyword, 10000)
     allData.value = res
-    total.value = res.length
+    total.value = filteredData.value.length
   } catch (error) {
     console.error('获取数据失败:', error)
   } finally {
@@ -341,12 +335,14 @@ const fetchData = async () => {
 
 const handleSearch = () => {
   currentPage.value = 1
+  fetchData()
 }
 
 const handleReset = () => {
   searchKeyword.value = ''
   searchGongdezhu.value = ''
   currentPage.value = 1
+  fetchData()
 }
 
 const handleSizeChange = (val) => {
@@ -504,6 +500,7 @@ watch(() => route.query.keyword, (newKeyword) => {
   if (newKeyword !== undefined) {
     searchKeyword.value = newKeyword || ''
     currentPage.value = 1
+    fetchData()
   }
 })
 </script>
