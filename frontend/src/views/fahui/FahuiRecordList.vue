@@ -152,6 +152,7 @@
                     placeholder="请选择法会"
                     style="flex: 1"
                     @change="confirmFahuiSelect"
+                    @blur="cancelFahuiSelect"
                   >
                     <el-option v-for="item in fahuiList" :key="item.id" :label="item.法会名称" :value="item.法会名称" />
                   </el-select>
@@ -688,12 +689,7 @@ const tempShizhuId = ref(null)
 const selectedShizhuInfo = ref(null)
 
 const displayFahuiLabel = computed(() => {
-  if (!formData.fahui_name) return ''
-  if (selectedFahuiInfo.value && selectedFahuiInfo.value.法会名称 === formData.fahui_name) {
-    return selectedFahuiInfo.value.法会名称
-  }
-  const fahui = fahuiList.value.find(item => item.法会名称 === formData.fahui_name)
-  return fahui ? fahui.法会名称 : ''
+  return formData.fahui_name || ''
 })
 
 const displayShizhuLabel = computed(() => {
@@ -1070,9 +1066,6 @@ const openFahuiSelect = async () => {
 }
 
 const confirmFahuiSelect = (val) => {
-  formData.fahui_name = val
-  fahuiSelecting.value = false
-  tempFahuiName.value = ''
   const fahui = fahuiList.value.find(item => item.法会名称 === val)
   if (fahui) {
     selectedFahuiInfo.value = {
@@ -1083,6 +1076,9 @@ const confirmFahuiSelect = (val) => {
   } else {
     selectedFahuiInfo.value = null
   }
+  formData.fahui_name = val
+  fahuiSelecting.value = false
+  tempFahuiName.value = ''
 }
 
 const cancelFahuiSelect = () => {
