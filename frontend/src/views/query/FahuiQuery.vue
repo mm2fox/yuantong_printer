@@ -809,6 +809,12 @@ const handleEditFromPrint = () => {
 const handleEdit = async (row) => {
   resetForm()
   isEdit.value = true
+  // 确保法会列表已加载
+  if (fahuiList.value.length === 0) {
+    await fetchFahuiList()
+  }
+  // 先加载施主列表，确保下拉框有数据
+  await fetchShizhuList()
   const fahui = fahuiList.value.find(item => item.法会名称 === row.fahui_name)
   Object.assign(formData, {
     id: row.id,
@@ -831,8 +837,7 @@ const handleEdit = async (row) => {
     djdate: row.djdate || '',
     remarks: row.remarks || ''
   })
-  dialogVisible.value = true
-  await fetchShizhuList()
+  // 确保选中的施主在下拉列表中
   if (row.fahui_user_id && !shizhuList.value.find(item => item.id === row.fahui_user_id)) {
     shizhuList.value.unshift({
       id: row.fahui_user_id,
@@ -854,6 +859,7 @@ const handleEdit = async (row) => {
       阳上六: row.xm10 || ''
     })
   }
+  dialogVisible.value = true
 }
 
 const handleDelete = async (row) => {
@@ -1008,6 +1014,12 @@ const resetForm = () => {
 const handleAdd = async (row) => {
   resetForm()
   isEdit.value = false
+  // 确保法会列表已加载
+  if (fahuiList.value.length === 0) {
+    await fetchFahuiList()
+  }
+  // 先加载施主列表，确保下拉框有数据
+  await fetchShizhuList()
   if (row) {
     const fahui = fahuiList.value.find(item => item.法会名称 === row.fahui_name)
     Object.assign(formData, {
@@ -1028,30 +1040,30 @@ const handleAdd = async (row) => {
       yanwang: row.yanwang !== undefined ? String(row.yanwang) : '0',
       amount: row.amount || 0
     })
+    // 确保选中的施主在下拉列表中
+    if (row.fahui_user_id && !shizhuList.value.find(item => item.id === row.fahui_user_id)) {
+      shizhuList.value.unshift({
+        id: row.fahui_user_id,
+        施主编号: row.施主编号 || '',
+        施主姓名: row.施主姓名 || '',
+        佛光注照一: row.xm1 || '',
+        佛光注照二: row.xm2 || '',
+        佛光注照三: row.xm3 || '',
+        佛光注照四: row.xm4 || '',
+        佛光接引一: row.xm1 || '',
+        佛光接引二: row.xm2 || '',
+        佛光接引三: row.xm3 || '',
+        佛光接引四: row.xm4 || '',
+        阳上一: row.xm5 || '',
+        阳上二: row.xm6 || '',
+        阳上三: row.xm7 || '',
+        阳上四: row.xm8 || '',
+        阳上五: row.xm9 || '',
+        阳上六: row.xm10 || ''
+      })
+    }
   }
   dialogVisible.value = true
-  await fetchShizhuList()
-  if (row && row.fahui_user_id && !shizhuList.value.find(item => item.id === row.fahui_user_id)) {
-    shizhuList.value.unshift({
-      id: row.fahui_user_id,
-      施主编号: row.施主编号 || '',
-      施主姓名: row.施主姓名 || '',
-      佛光注照一: row.xm1 || '',
-      佛光注照二: row.xm2 || '',
-      佛光注照三: row.xm3 || '',
-      佛光注照四: row.xm4 || '',
-      佛光接引一: row.xm1 || '',
-      佛光接引二: row.xm2 || '',
-      佛光接引三: row.xm3 || '',
-      佛光接引四: row.xm4 || '',
-      阳上一: row.xm5 || '',
-      阳上二: row.xm6 || '',
-      阳上三: row.xm7 || '',
-      阳上四: row.xm8 || '',
-      阳上五: row.xm9 || '',
-      阳上六: row.xm10 || ''
-    })
-  }
 }
 
 const handleFahuiSelect = (val) => {
