@@ -241,21 +241,15 @@
           <el-col :span="12">
             <el-form-item label="施主" prop="fahui_user_id">
               <div style="display: flex; gap: 8px;">
-                <el-select
+                <el-select-v2
                   v-model="formData.fahui_user_id"
+                  :options="shizhuOptions"
                   filterable
                   :loading="shizhuLoading"
                   placeholder="搜索选择施主"
                   style="flex: 1"
                   @change="handleShizhuSelect"
-                >
-                  <el-option
-                    v-for="item in shizhuList"
-                    :key="item.id"
-                    :label="`${item.施主姓名} (${item.施主编号})`"
-                    :value="item.id"
-                  />
-                </el-select>
+                />
                 <el-button type="primary" @click="handleOpenAddShizhu">新增</el-button>
               </div>
             </el-form-item>
@@ -947,6 +941,13 @@ const selectedShizhuName = computed(() => {
   const shizhu = shizhuList.value.find(item => item.id === formData.fahui_user_id)
   return shizhu ? `${shizhu.施主姓名} (${shizhu.施主编号})` : ''
 })
+
+const shizhuOptions = computed(() =>
+  shizhuList.value.map(item => ({
+    value: item.id,
+    label: `${item.施主姓名} (${item.施主编号})`
+  }))
+)
 
 const fetchShizhuList = async (keyword = '') => {
   shizhuLoading.value = true

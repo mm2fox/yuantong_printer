@@ -1,10 +1,10 @@
 {
-  "git_commit": "db24af7e8abdb0507e1ec4a5284a56fa6c87034c",
+  "git_commit": "e7a115d0ea748de27485ab3b9192bbfe744a471d",
   "git_branch": "main",
   "git_author": "mm2fox",
-  "git_message": "fix: 施主列表limit从50改为10000，后端去掉无关键词时500条限制",
-  "git_date": "2026-07-28 09:26:26 +0800",
-  "version": "db24af7",
-  "build_time": "2026-07-28T09:56:52.541942",
-  "change_summary": "db24af7 fix: 施主列表limit从50改为10000，后端去掉无关键词时500条限制\nb9d69a5 fix: 弹窗先渲染再设值，解决el-select下拉框不显示选中项\n309e86d fix: 施主下拉框去掉remote模式改为filterable，页面加载时预加载施主列表\nd6b4f21 fix: 法会查询新增登记时下拉框先加载数据再打开弹窗\n95961f8 fix: 法会记录查询操作列加宽并固定右侧，避免按钮换行\nd3d5258 feat: 施主/法会管理功能优化及打印对齐修复\n419198d feat: 添加Excel粘贴录入功能及部署打包工具\nefc4bed fix: 修复BASE_PATH未定义导致load_build_version报错\ne850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
+  "git_message": "fix: 施主查询/法会登记新增时下拉框先加载数据再开弹窗，去掉remote模式",
+  "git_date": "2026-07-28 10:01:02 +0800",
+  "version": "e7a115d",
+  "build_time": "2026-07-28T10:08:17.137900",
+  "change_summary": "e7a115d fix: 施主查询/法会登记新增时下拉框先加载数据再开弹窗，去掉remote模式\ndb24af7 fix: 施主列表limit从50改为10000，后端去掉无关键词时500条限制\nb9d69a5 fix: 弹窗先渲染再设值，解决el-select下拉框不显示选中项\n309e86d fix: 施主下拉框去掉remote模式改为filterable，页面加载时预加载施主列表\nd6b4f21 fix: 法会查询新增登记时下拉框先加载数据再打开弹窗\n95961f8 fix: 法会记录查询操作列加宽并固定右侧，避免按钮换行\nd3d5258 feat: 施主/法会管理功能优化及打印对齐修复\n419198d feat: 添加Excel粘贴录入功能及部署打包工具\nefc4bed fix: 修复BASE_PATH未定义导致load_build_version报错\ne850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
 }
