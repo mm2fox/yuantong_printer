@@ -182,9 +182,28 @@
           <el-col :span="12">
             <el-form-item label="法会名称" prop="fahui_name">
               <div style="display: flex; gap: 8px;">
-                <el-select v-model="formData.fahui_name" style="flex: 1" filterable @change="handleFahuiSelect">
-                  <el-option v-for="item in fahuiList" :key="item.id" :label="item.法会名称" :value="item.法会名称" />
-                </el-select>
+                <template v-if="!fahuiSelecting">
+                  <el-input
+                    :model-value="displayFahuiLabel"
+                    readonly
+                    placeholder="请选择法会"
+                    style="flex: 1"
+                  />
+                  <el-button type="primary" @click="openFahuiSelect">选择</el-button>
+                </template>
+                <template v-else>
+                  <el-select
+                    ref="fahuiSelectRef"
+                    v-model="tempFahuiName"
+                    filterable
+                    placeholder="请选择法会"
+                    style="flex: 1"
+                    @change="confirmFahuiSelect"
+                  >
+                    <el-option v-for="item in fahuiList" :key="item.id" :label="item.法会名称" :value="item.法会名称" />
+                  </el-select>
+                  <el-button @click="cancelFahuiSelect">取消</el-button>
+                </template>
                 <el-button type="primary" @click="handleOpenAddFahui">新增</el-button>
               </div>
             </el-form-item>
@@ -621,7 +640,11 @@ const detailVisible = ref(false)
 const detailData = ref({})
 const dialogVisible = ref(false)
 const formRef = ref(null)
+const fahuiSelectRef = ref(null)
 const shizhuSelectRef = ref(null)
+const fahuiSelecting = ref(false)
+const tempFahuiName = ref('')
+const selectedFahuiInfo = ref(null)
 const shizhuSelecting = ref(false)
 const tempShizhuId = ref(null)
 const selectedShizhuInfo = ref(null)
@@ -787,6 +810,15 @@ const formRules = {
   amount: [{ required: true, message: '请输入金额', trigger: 'blur' }]
 }
 
+const displayFahuiLabel = computed(() => {
+  if (!formData.fahui_name) return ''
+  if (selectedFahuiInfo.value && selectedFahuiInfo.value.法会名称 === formData.fahui_name) {
+    return selectedFahuiInfo.value.法会名称
+  }
+  const fahui = fahuiList.value.find(item => item.法会名称 === formData.fahui_name)
+  return fahui ? fahui.法会名称 : ''
+})
+
 const displayShizhuLabel = computed(() => {
   if (!formData.fahui_user_id) return ''
   if (selectedShizhuInfo.value && selectedShizhuInfo.value.id == formData.fahui_user_id) {
@@ -827,6 +859,9 @@ const resetForm = () => {
     prt: '0',
     remarks: ''
   })
+  fahuiSelecting.value = false
+  tempFahuiName.value = ''
+  selectedFahuiInfo.value = null
   shizhuSelecting.value = false
   tempShizhuId.value = null
   selectedShizhuInfo.value = null
@@ -840,6 +875,12 @@ const handleAdd = async (row) => {
   dialogVisible.value = true
   await nextTick()
   if (row) {
+    if (row.fahui_name) {
+      selectedFahuiInfo.value = {
+        id: row.fahui_id,
+        法会名称: row.fahui_name
+      }
+    }
     if (row.fahui_user_id) {
       selectedShizhuInfo.value = {
         id: row.fahui_user_id,
@@ -869,11 +910,42 @@ const handleAdd = async (row) => {
   }
 }
 
-const handleFahuiSelect = (val) => {
-  const fahui = fahuiList.value.find(item => item.法会名称 === val)
+const applyFahuiByName = (name) => {
+  const fahui = fahuiList.value.find(item => item.法会名称 === name)
   if (fahui) {
     formData.fahui_id = fahui.id
   }
+}
+
+const openFahuiSelect = async () => {
+  if (fahuiList.value.length === 0) {
+    await fetchFahuiList()
+  }
+  fahuiSelecting.value = true
+  tempFahuiName.value = formData.fahui_name || ''
+  await nextTick()
+  fahuiSelectRef.value?.focus?.()
+}
+
+const confirmFahuiSelect = (val) => {
+  formData.fahui_name = val
+  fahuiSelecting.value = false
+  tempFahuiName.value = ''
+  const fahui = fahuiList.value.find(item => item.法会名称 === val)
+  if (fahui) {
+    selectedFahuiInfo.value = {
+      id: fahui.id,
+      法会名称: fahui.法会名称
+    }
+    formData.fahui_id = fahui.id
+  } else {
+    selectedFahuiInfo.value = null
+  }
+}
+
+const cancelFahuiSelect = () => {
+  fahuiSelecting.value = false
+  tempFahuiName.value = ''
 }
 
 const applyShizhuById = (id) => {
