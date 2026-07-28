@@ -244,8 +244,6 @@
                 <el-select
                   v-model="formData.fahui_user_id"
                   filterable
-                  remote
-                  :remote-method="handleShizhuSearch"
                   :loading="shizhuLoading"
                   placeholder="搜索选择施主"
                   style="flex: 1"
@@ -1332,6 +1330,7 @@ const handleSubmitAddShizhu = async () => {
 
 onMounted(() => {
   fetchFahuiList()
+  fetchShizhuList()
   fetchData()
 })
 </script>

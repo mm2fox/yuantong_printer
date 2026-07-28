@@ -1,10 +1,10 @@
 {
-  "git_commit": "95961f8d3f6b24a8bdbd73efe06a1bf5dbc893e0",
+  "git_commit": "d6b4f21a04cf6a143bd85613484cf319639c6be4",
   "git_branch": "main",
   "git_author": "mm2fox",
-  "git_message": "fix: 法会记录查询操作列加宽并固定右侧，避免按钮换行",
-  "git_date": "2026-07-27 13:14:30 +0800",
-  "version": "95961f8",
-  "build_time": "2026-07-28T08:52:56.444770",
-  "change_summary": "95961f8 fix: 法会记录查询操作列加宽并固定右侧，避免按钮换行\nd3d5258 feat: 施主/法会管理功能优化及打印对齐修复\n419198d feat: 添加Excel粘贴录入功能及部署打包工具\nefc4bed fix: 修复BASE_PATH未定义导致load_build_version报错\ne850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
+  "git_message": "fix: 法会查询新增登记时下拉框先加载数据再打开弹窗",
+  "git_date": "2026-07-28 08:54:01 +0800",
+  "version": "d6b4f21",
+  "build_time": "2026-07-28T09:01:52.211613",
+  "change_summary": "d6b4f21 fix: 法会查询新增登记时下拉框先加载数据再打开弹窗\n95961f8 fix: 法会记录查询操作列加宽并固定右侧，避免按钮换行\nd3d5258 feat: 施主/法会管理功能优化及打印对齐修复\n419198d feat: 添加Excel粘贴录入功能及部署打包工具\nefc4bed fix: 修复BASE_PATH未定义导致load_build_version报错\ne850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
 }
