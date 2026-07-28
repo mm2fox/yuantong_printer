@@ -4,7 +4,10 @@
       <template #header>
         <div class="card-header">
           <span>法会登记</span>
-          <el-button type="primary" @click="handleAdd">新增登记</el-button>
+          <div>
+            <el-button type="success" @click="openBatchPasteDialog">批量粘贴录入</el-button>
+            <el-button type="primary" @click="handleAdd">新增登记</el-button>
+          </div>
         </div>
       </template>
       
@@ -152,23 +155,36 @@
           <el-col :span="12">
             <el-form-item label="施主" prop="fahui_user_id">
               <div style="display: flex; gap: 8px;">
-                <el-select
-                  v-model="formData.fahui_user_id"
-                  filterable
-                  remote
-                  :remote-method="handleShizhuSearch"
-                  :loading="shizhuLoading"
-                  placeholder="输入姓名/编号搜索"
-                  style="flex: 1"
-                  @change="handleShizhuSelect"
-                >
-                  <el-option
-                    v-for="item in shizhuList"
-                    :key="item.id"
-                    :label="item.施主姓名 ? `${item.施主姓名} (${item.施主编号})` : item.施主编号"
-                    :value="item.id"
+                <template v-if="!shizhuSelecting">
+                  <el-input
+                    :model-value="displayShizhuLabel"
+                    readonly
+                    placeholder="请选择施主"
+                    style="flex: 1"
                   />
-                </el-select>
+                  <el-button type="primary" @click="openShizhuSelect">选择</el-button>
+                </template>
+                <template v-else>
+                  <el-select
+                    ref="shizhuSelectRef"
+                    v-model="tempShizhuId"
+                    filterable
+                    remote
+                    :remote-method="handleShizhuSearch"
+                    :loading="shizhuLoading"
+                    placeholder="输入姓名/编号搜索"
+                    style="flex: 1"
+                    @change="confirmShizhuSelect"
+                  >
+                    <el-option
+                      v-for="item in shizhuList"
+                      :key="item.id"
+                      :label="item.施主姓名 ? `${item.施主姓名} (${item.施主编号})` : item.施主编号"
+                      :value="item.id"
+                    />
+                  </el-select>
+                  <el-button @click="cancelShizhuSelect">取消</el-button>
+                </template>
                 <el-button type="primary" @click="handleOpenAddShizhu">新增</el-button>
               </div>
             </el-form-item>
@@ -343,6 +359,61 @@
       <template #footer>
         <el-button @click="pasteDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="handlePasteExcel">解析并填充</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog
+      v-model="batchPasteDialogVisible"
+      title="批量粘贴录入"
+      width="900px"
+      destroy-on-close
+    >
+      <el-form :inline="true" style="margin-bottom: 12px;">
+        <el-form-item label="法会名称" required>
+          <el-select v-model="batchPasteForm.fahui_name" filterable placeholder="选择法会" style="width: 200px" @change="handleBatchFahuiSelect">
+            <el-option v-for="item in fahuiList" :key="item.id" :label="item.法会名称" :value="item.法会名称" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="登记日期">
+          <el-date-picker v-model="batchPasteForm.djdate" type="date" placeholder="选择日期" value-format="YYYY-MM-DD" style="width: 160px" />
+        </el-form-item>
+      </el-form>
+
+      <el-alert type="info" :closable="false" style="margin-bottom: 12px;">
+        <div>从Excel复制多行数据（每行一条记录），粘贴到下方文本框。点击"解析"后可预览数据，确认后批量创建。</div>
+        <div style="margin-top:4px; color:#909399; font-size:12px;">Excel列顺序：类型 | 牌位 | 金额 | 每月放生姓名 | 姓名2 | 姓名3 | 姓名4 | 姓名5</div>
+      </el-alert>
+
+      <el-input
+        v-model="batchPasteText"
+        type="textarea"
+        :rows="8"
+        placeholder="在此处粘贴从Excel复制的多行数据..."
+        style="margin-bottom: 12px;"
+      />
+
+      <div style="margin-bottom: 12px;">
+        <el-button type="primary" @click="parseBatchPaste" :disabled="!batchPasteText.trim()">解析数据</el-button>
+        <el-button @click="batchPastePreview = []; batchPasteText = ''">清空</el-button>
+      </div>
+
+      <el-table v-if="batchPastePreview.length > 0" :data="batchPastePreview" border max-height="300" stripe size="small">
+        <el-table-column type="index" label="#" width="50" />
+        <el-table-column prop="yanwangLabel" label="类型" width="70" />
+        <el-table-column prop="paiwei_type" label="牌位" width="70" />
+        <el-table-column prop="amount" label="金额" width="80" />
+        <el-table-column prop="xm1" label="姓名1" width="100" show-overflow-tooltip />
+        <el-table-column prop="xm2" label="姓名2" width="100" show-overflow-tooltip />
+        <el-table-column prop="xm3" label="姓名3" width="100" show-overflow-tooltip />
+        <el-table-column prop="xm4" label="姓名4" width="100" show-overflow-tooltip />
+        <el-table-column prop="xm5" label="姓名5" width="100" show-overflow-tooltip />
+      </el-table>
+
+      <template #footer>
+        <el-button @click="batchPasteDialogVisible = false">取消</el-button>
+        <el-button type="success" @click="handleBatchSubmit" :loading="batchSubmitLoading" :disabled="batchPastePreview.length === 0 || !batchPasteForm.fahui_name">
+          批量创建 ({{ batchPastePreview.length }} 条)
+        </el-button>
       </template>
     </el-dialog>
 
@@ -562,7 +633,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { fahuiRecordApi } from '@/api/fahuiRecords'
 import { fahuiUserApi } from '@/api/fahuiUsers'
@@ -575,26 +646,40 @@ const tableData = ref([])
 const fahuiList = ref([])
 const shizhuList = ref([])
 const shizhuLoading = ref(false)
-const shizhuSearchKeyword = ref('')
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
+const shizhuSelectRef = ref(null)
 const pasteDialogVisible = ref(false)
 const pasteText = ref('')
+const batchPasteDialogVisible = ref(false)
+const batchPasteText = ref('')
+const batchPastePreview = ref([])
+const batchSubmitLoading = ref(false)
+const batchPasteForm = reactive({
+  fahui_id: null,
+  fahui_name: '',
+  djdate: new Date().toISOString().split('T')[0]
+})
 const selectedRows = ref([])
+const shizhuSelecting = ref(false)
+const tempShizhuId = ref(null)
+const selectedShizhuInfo = ref(null)
 
-const selectedShizhuName = computed(() => {
+const displayShizhuLabel = computed(() => {
   if (!formData.fahui_user_id) return ''
-  const shizhu = shizhuList.value.find(item => item.id === formData.fahui_user_id)
+  if (selectedShizhuInfo.value && selectedShizhuInfo.value.id == formData.fahui_user_id) {
+    return selectedShizhuInfo.value.施主姓名
+      ? `${selectedShizhuInfo.value.施主姓名} (${selectedShizhuInfo.value.施主编号})`
+      : selectedShizhuInfo.value.施主编号
+  }
+  const shizhu = shizhuList.value.find(item => item.id == formData.fahui_user_id)
   return shizhu ? (shizhu.施主姓名 ? `${shizhu.施主姓名} (${shizhu.施主编号})` : shizhu.施主编号) : ''
 })
 
-const shizhuOptions = computed(() =>
-  shizhuList.value.map(item => ({
-    value: item.id,
-    label: `${item.施主姓名} (${item.施主编号})`
-  }))
-)
+const selectedShizhuName = computed(() => {
+  return displayShizhuLabel.value
+})
 
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -676,7 +761,7 @@ const fetchFahuiList = async () => {
 const fetchShizhuList = async (keyword = '') => {
   shizhuLoading.value = true
   try {
-    const res = await fahuiUserApi.getList(keyword || undefined, 50)
+    const res = await fahuiUserApi.getList(keyword || undefined, 500)
     shizhuList.value = res
   } catch (error) {
     console.error('获取施主列表失败:', error)
@@ -686,8 +771,41 @@ const fetchShizhuList = async (keyword = '') => {
 }
 
 const handleShizhuSearch = (query) => {
-  shizhuSearchKeyword.value = query
   fetchShizhuList(query)
+}
+
+const openShizhuSelect = async () => {
+  shizhuSelecting.value = true
+  tempShizhuId.value = formData.fahui_user_id
+  await fetchShizhuList('')
+  await nextTick()
+  // 如果当前施主不在列表中，手动加入以便下拉能默认选中
+  if (tempShizhuId.value && !shizhuList.value.find(item => item.id == tempShizhuId.value) && selectedShizhuInfo.value) {
+    shizhuList.value.unshift({ ...selectedShizhuInfo.value })
+  }
+  shizhuSelectRef.value?.focus?.()
+}
+
+const confirmShizhuSelect = (val) => {
+  formData.fahui_user_id = val
+  shizhuSelecting.value = false
+  tempShizhuId.value = null
+  const shizhu = shizhuList.value.find(item => item.id == val)
+  if (shizhu) {
+    selectedShizhuInfo.value = {
+      id: shizhu.id,
+      施主编号: shizhu.施主编号 || '',
+      施主姓名: shizhu.施主姓名 || ''
+    }
+    fillNamesFromShizhu(shizhu)
+  } else {
+    selectedShizhuInfo.value = null
+  }
+}
+
+const cancelShizhuSelect = () => {
+  shizhuSelecting.value = false
+  tempShizhuId.value = null
 }
 
 const handleSearch = () => {
@@ -743,6 +861,9 @@ const resetForm = () => {
     prt: '0',
     remarks: ''
   })
+  shizhuSelecting.value = false
+  tempShizhuId.value = null
+  selectedShizhuInfo.value = null
 }
 
 const handleAdd = async () => {
@@ -751,7 +872,7 @@ const handleAdd = async () => {
   if (fahuiList.value.length === 0) {
     await fetchFahuiList()
   }
-  await fetchShizhuList()
+  await fetchShizhuList('')
   dialogVisible.value = true
 }
 
@@ -761,12 +882,20 @@ const handleEdit = async (row) => {
   if (fahuiList.value.length === 0) {
     await fetchFahuiList()
   }
-  await fetchShizhuList()
+  dialogVisible.value = true
+  // 直接用行数据缓存当前施主信息，避免依赖 remote select 回显
+  if (row.fahui_user_id) {
+    selectedShizhuInfo.value = {
+      id: row.fahui_user_id,
+      施主编号: row.施主编号 || '',
+      施主姓名: row.施主姓名 || ''
+    }
+  }
   Object.assign(formData, {
     id: row.id,
     fahui_id: row.fahui_id,
     fahui_name: row.fahui_name,
-    fahui_user_id: row.fahui_user_id,
+    fahui_user_id: row.fahui_user_id ? Number(row.fahui_user_id) : null,
     座次: row.座次,
     xm1: row.xm1,
     xm2: row.xm2,
@@ -785,29 +914,6 @@ const handleEdit = async (row) => {
     prt: String(row.prt),
     remarks: row.remarks
   })
-  // 确保当前施主在列表中，否则 el-select 无法回显 label
-  if (row.fahui_user_id && !shizhuList.value.find(item => item.id === row.fahui_user_id)) {
-    shizhuList.value.unshift({
-      id: row.fahui_user_id,
-      施主编号: row.施主编号 || '',
-      施主姓名: row.施主姓名 || '',
-      佛光注照一: row.xm1 || '',
-      佛光注照二: row.xm2 || '',
-      佛光注照三: row.xm3 || '',
-      佛光注照四: row.xm4 || '',
-      佛光接引一: row.xm1 || '',
-      佛光接引二: row.xm2 || '',
-      佛光接引三: row.xm3 || '',
-      佛光接引四: row.xm4 || '',
-      阳上一: row.xm5 || '',
-      阳上二: row.xm6 || '',
-      阳上三: row.xm7 || '',
-      阳上四: row.xm8 || '',
-      阳上五: row.xm9 || '',
-      阳上六: row.xm10 || ''
-    })
-  }
-  dialogVisible.value = true
 }
 
 const handleDelete = async (row) => {
@@ -917,8 +1023,8 @@ const handleFahuiSelect = (val) => {
   }
 }
 
-const handleShizhuSelect = (val) => {
-  if (!val) {
+const applyShizhuById = (id) => {
+  if (!id) {
     formData.xm1 = ''
     formData.xm2 = ''
     formData.xm3 = ''
@@ -931,7 +1037,7 @@ const handleShizhuSelect = (val) => {
     formData.xm10 = ''
     return
   }
-  const shizhu = shizhuList.value.find(item => item.id === val)
+  const shizhu = shizhuList.value.find(item => item.id == id)
   if (shizhu) {
     fillNamesFromShizhu(shizhu)
   }
@@ -949,10 +1055,7 @@ const handleYanwangChange = () => {
   formData.xm9 = ''
   formData.xm10 = ''
   if (formData.fahui_user_id) {
-    const shizhu = shizhuList.value.find(item => item.id === formData.fahui_user_id)
-    if (shizhu) {
-      fillNamesFromShizhu(shizhu)
-    }
+    applyShizhuById(formData.fahui_user_id)
   }
 }
 
@@ -1056,6 +1159,110 @@ const handlePasteExcel = () => {
 
   pasteDialogVisible.value = false
   ElMessage.success('已根据Excel数据填充表单')
+}
+
+const openBatchPasteDialog = () => {
+  batchPasteText.value = ''
+  batchPastePreview.value = []
+  batchPasteForm.fahui_id = null
+  batchPasteForm.fahui_name = ''
+  batchPasteForm.djdate = new Date().toISOString().split('T')[0]
+  batchPasteDialogVisible.value = true
+}
+
+const handleBatchFahuiSelect = (val) => {
+  const fahui = fahuiList.value.find(item => item.法会名称 === val)
+  if (fahui) {
+    batchPasteForm.fahui_id = fahui.id
+  }
+}
+
+const parseBatchPaste = () => {
+  const raw = batchPasteText.value.trim()
+  if (!raw) {
+    ElMessage.warning('请粘贴数据')
+    return
+  }
+
+  const lines = raw.split('\n').filter(l => l.trim())
+  const preview = []
+
+  for (const line of lines) {
+    const cols = line.split('\t').map(c => c.trim())
+
+    if (cols.length < 4) {
+      ElMessage.warning(`数据列数不足（需要至少4列：类型、牌位、金额、姓名），跳过该行`)
+      continue
+    }
+
+    const type = cols[2] || '延生'
+    const yanwang = type === '往生' ? 1 : 0
+    const paiwei = cols[3] || '中'
+    let paiweiType = '中牌'
+    if (['大', '中', '小'].includes(paiwei)) {
+      paiweiType = paiwei + '牌'
+    } else if (['大牌', '中牌', '小牌'].includes(paiwei)) {
+      paiweiType = paiwei
+    }
+
+    const amountStr = cols[5] || ''
+    let amount = 0
+    if (amountStr && amountStr !== '长期' && !isNaN(parseFloat(amountStr))) {
+      amount = parseFloat(amountStr)
+    }
+
+    const row = {
+      yanwang,
+      yanwangLabel: type,
+      paiwei_type: paiweiType,
+      amount,
+      xm1: cols[8] || '',
+      xm2: cols[9] || '',
+      xm3: cols[10] || '',
+      xm4: cols[11] || '',
+      xm5: cols[12] || '',
+      xm: yanwang === 0 ? '佛光注照' : '佛光接引'
+    }
+
+    preview.push(row)
+  }
+
+  batchPastePreview.value = preview
+  if (preview.length > 0) {
+    ElMessage.success(`解析成功，共 ${preview.length} 条记录`)
+  } else {
+    ElMessage.warning('未解析到有效数据')
+  }
+}
+
+const handleBatchSubmit = async () => {
+  if (!batchPasteForm.fahui_name) {
+    ElMessage.warning('请选择法会')
+    return
+  }
+  if (batchPastePreview.value.length === 0) {
+    ElMessage.warning('没有可提交的数据')
+    return
+  }
+
+  batchSubmitLoading.value = true
+  try {
+    const payload = {
+      fahui_id: batchPasteForm.fahui_id,
+      fahui_name: batchPasteForm.fahui_name,
+      djdate: batchPasteForm.djdate,
+      records: batchPastePreview.value
+    }
+    const res = await fahuiRecordApi.batchCreate(payload)
+    ElMessage.success(res.message || `成功创建 ${res.count} 条记录`)
+    batchPasteDialogVisible.value = false
+    fetchData()
+  } catch (error) {
+    console.error('批量创建失败:', error)
+    ElMessage.error(error.response?.data?.detail || '批量创建失败')
+  } finally {
+    batchSubmitLoading.value = false
+  }
 }
 
 const handleSubmit = async () => {
@@ -1235,7 +1442,7 @@ const handleSubmitAddShizhu = async () => {
         await fahuiUserApi.create(addShizhuFormData)
         ElMessage.success('施主创建成功')
         addShizhuDialogVisible.value = false
-        await fetchShizhuList(shizhuSearchKeyword.value)
+        await fetchShizhuList('')
         const newShizhu = shizhuList.value.find(item => item.施主编号 === addShizhuFormData.施主编号)
         if (newShizhu) {
           formData.fahui_user_id = newShizhu.id

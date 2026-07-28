@@ -229,6 +229,78 @@ async def query_by_shizhu(
         "total_amount": total_amount
     }
 
+@router.post("/batch")
+async def batch_create_fahui_records(
+    payload: dict = Body(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    records_data = payload.get("records", [])
+    if not records_data:
+        raise HTTPException(status_code=400, detail="记录列表不能为空")
+
+    fahui_id = payload.get("fahui_id")
+    fahui_name = payload.get("fahui_name")
+    djdate = payload.get("djdate") or datetime.now().strftime("%Y-%m-%d")
+
+    if fahui_id:
+        max_result = await db.execute(
+            select(FahuiRecord.座次).where(FahuiRecord.fahui_id == fahui_id).order_by(FahuiRecord.座次.desc()).limit(1)
+        )
+        max_zuoci = max_result.scalar_one_or_none()
+        next_zuoci = (int(max_zuoci) + 1) if max_zuoci else 1
+    else:
+        next_zuoci = 1
+
+    created_records = []
+    for item in records_data:
+        record = FahuiRecord(
+            fahui_id=fahui_id,
+            fahui_name=fahui_name,
+            fahui_user_id=item.get("fahui_user_id"),
+            yanwang=item.get("yanwang", 0),
+            paiwei_type=item.get("paiwei_type", "中牌"),
+            amount=item.get("amount", 0),
+            xm1=item.get("xm1"),
+            xm2=item.get("xm2"),
+            xm3=item.get("xm3"),
+            xm4=item.get("xm4"),
+            xm5=item.get("xm5"),
+            xm6=item.get("xm6"),
+            xm7=item.get("xm7"),
+            xm8=item.get("xm8"),
+            xm9=item.get("xm9"),
+            xm10=item.get("xm10"),
+            xm=item.get("xm"),
+            djdate=djdate,
+            prt=0,
+            remarks=item.get("remarks"),
+            座次=str(next_zuoci),
+            经办人=current_user.username,
+            施主姓名=item.get("施主姓名"),
+            施主编号=item.get("施主编号"),
+        )
+        if current_user.temple_id:
+            record.temple_id = current_user.temple_id
+        db.add(record)
+        created_records.append(record)
+        next_zuoci += 1
+
+    await db.commit()
+    for r in created_records:
+        await db.refresh(r)
+
+    log = SystemLog(
+        用户名=current_user.username,
+        操作类型="批量新增",
+        操作内容=f"批量创建法会登记：{fahui_name} - 共{len(created_records)}条",
+        created_at=datetime.utcnow()
+    )
+    db.add(log)
+    await db.commit()
+
+    return {"message": f"成功创建{len(created_records)}条记录", "count": len(created_records)}
+
 @router.get("/{record_id}", response_model=FahuiRecordResponse)
 async def get_fahui_record(
     record_id: int,

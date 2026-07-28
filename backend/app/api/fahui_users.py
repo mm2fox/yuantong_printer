@@ -15,7 +15,7 @@ router = APIRouter(prefix="/api/fahui-users", tags=["施主管理"])
 @router.get("", response_model=List[FahuiUserResponse])
 async def get_fahui_users(
     keyword: Optional[str] = Query(None, description="搜索关键词"),
-    limit: int = Query(50, description="返回数量限制", ge=1, le=10000),
+    limit: int = Query(50, description="返回数量限制", ge=1, le=50000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):

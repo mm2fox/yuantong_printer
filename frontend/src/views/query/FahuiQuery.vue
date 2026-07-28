@@ -241,23 +241,36 @@
           <el-col :span="12">
             <el-form-item label="施主" prop="fahui_user_id">
               <div style="display: flex; gap: 8px;">
-                <el-select
-                  v-model="formData.fahui_user_id"
-                  filterable
-                  remote
-                  :remote-method="handleShizhuSearch"
-                  :loading="shizhuLoading"
-                  placeholder="输入姓名/编号搜索"
-                  style="flex: 1"
-                  @change="handleShizhuSelect"
-                >
-                  <el-option
-                    v-for="item in shizhuList"
-                    :key="item.id"
-                    :label="item.施主姓名 ? `${item.施主姓名} (${item.施主编号})` : item.施主编号"
-                    :value="item.id"
+                <template v-if="!shizhuSelecting">
+                  <el-input
+                    :model-value="displayShizhuLabel"
+                    readonly
+                    placeholder="请选择施主"
+                    style="flex: 1"
                   />
-                </el-select>
+                  <el-button type="primary" @click="openShizhuSelect">选择</el-button>
+                </template>
+                <template v-else>
+                  <el-select
+                    ref="shizhuSelectRef"
+                    v-model="tempShizhuId"
+                    filterable
+                    remote
+                    :remote-method="handleShizhuSearch"
+                    :loading="shizhuLoading"
+                    placeholder="输入姓名/编号搜索"
+                    style="flex: 1"
+                    @change="confirmShizhuSelect"
+                  >
+                    <el-option
+                      v-for="item in shizhuList"
+                      :key="item.id"
+                      :label="item.施主姓名 ? `${item.施主姓名} (${item.施主编号})` : item.施主编号"
+                      :value="item.id"
+                    />
+                  </el-select>
+                  <el-button @click="cancelShizhuSelect">取消</el-button>
+                </template>
                 <el-button type="primary" @click="handleOpenAddShizhu">新增</el-button>
               </div>
             </el-form-item>
@@ -625,7 +638,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed } from 'vue'
+import { ref, reactive, onMounted, computed, nextTick } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { fahuiRecordApi } from '@/api/fahuiRecords'
 import { fahuiInfoApi } from '@/api/fahuiInfo'
@@ -638,7 +651,6 @@ const tableData = ref([])
 const fahuiList = ref([])
 const shizhuList = ref([])
 const shizhuLoading = ref(false)
-const shizhuSearchKeyword = ref('')
 const total = ref(0)
 const totalAmount = ref(0)
 const detailVisible = ref(false)
@@ -649,6 +661,10 @@ const selectedRows = ref([])
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const formRef = ref(null)
+const shizhuSelectRef = ref(null)
+const shizhuSelecting = ref(false)
+const tempShizhuId = ref(null)
+const selectedShizhuInfo = ref(null)
 
 const currentPage = ref(1)
 const pageSize = ref(20)
@@ -812,13 +828,20 @@ const handleEdit = async (row) => {
   if (fahuiList.value.length === 0) {
     await fetchFahuiList()
   }
-  await fetchShizhuList()
+  dialogVisible.value = true
+  if (row.fahui_user_id) {
+    selectedShizhuInfo.value = {
+      id: row.fahui_user_id,
+      施主编号: row.施主编号 || '',
+      施主姓名: row.施主姓名 || ''
+    }
+  }
   const fahui = fahuiList.value.find(item => item.法会名称 === row.fahui_name)
   Object.assign(formData, {
     id: row.id,
     fahui_id: fahui ? fahui.id : (row.fahui_id || ''),
     fahui_name: row.fahui_name || '',
-    fahui_user_id: row.fahui_user_id || null,
+    fahui_user_id: row.fahui_user_id ? Number(row.fahui_user_id) : null,
     xm1: row.xm1 || '',
     xm2: row.xm2 || '',
     xm3: row.xm3 || '',
@@ -835,14 +858,6 @@ const handleEdit = async (row) => {
     djdate: row.djdate || '',
     remarks: row.remarks || ''
   })
-  if (row.fahui_user_id && !shizhuList.value.find(item => item.id === row.fahui_user_id)) {
-    shizhuList.value.unshift({
-      id: row.fahui_user_id,
-      施主编号: row.施主编号 || '',
-      施主姓名: row.施主姓名 || ''
-    })
-  }
-  dialogVisible.value = true
 }
 
 const handleDelete = async (row) => {
@@ -944,23 +959,25 @@ const formRules = {
   amount: [{ required: true, message: '请输入金额', trigger: 'blur' }]
 }
 
-const selectedShizhuName = computed(() => {
+const displayShizhuLabel = computed(() => {
   if (!formData.fahui_user_id) return ''
-  const shizhu = shizhuList.value.find(item => item.id === formData.fahui_user_id)
+  if (selectedShizhuInfo.value && selectedShizhuInfo.value.id == formData.fahui_user_id) {
+    return selectedShizhuInfo.value.施主姓名
+      ? `${selectedShizhuInfo.value.施主姓名} (${selectedShizhuInfo.value.施主编号})`
+      : selectedShizhuInfo.value.施主编号
+  }
+  const shizhu = shizhuList.value.find(item => item.id == formData.fahui_user_id)
   return shizhu ? (shizhu.施主姓名 ? `${shizhu.施主姓名} (${shizhu.施主编号})` : shizhu.施主编号) : ''
 })
 
-const shizhuOptions = computed(() =>
-  shizhuList.value.map(item => ({
-    value: item.id,
-    label: `${item.施主姓名} (${item.施主编号})`
-  }))
-)
+const selectedShizhuName = computed(() => {
+  return displayShizhuLabel.value
+})
 
 const fetchShizhuList = async (keyword = '') => {
   shizhuLoading.value = true
   try {
-    const res = await fahuiUserApi.getList(keyword || undefined, 50)
+    const res = await fahuiUserApi.getList(keyword || undefined, 500)
     shizhuList.value = res
   } catch (error) {
     console.error('获取施主列表失败:', error)
@@ -970,8 +987,40 @@ const fetchShizhuList = async (keyword = '') => {
 }
 
 const handleShizhuSearch = (query) => {
-  shizhuSearchKeyword.value = query
   fetchShizhuList(query)
+}
+
+const openShizhuSelect = async () => {
+  shizhuSelecting.value = true
+  tempShizhuId.value = formData.fahui_user_id
+  await fetchShizhuList('')
+  await nextTick()
+  if (tempShizhuId.value && !shizhuList.value.find(item => item.id == tempShizhuId.value) && selectedShizhuInfo.value) {
+    shizhuList.value.unshift({ ...selectedShizhuInfo.value })
+  }
+  shizhuSelectRef.value?.focus?.()
+}
+
+const confirmShizhuSelect = (val) => {
+  formData.fahui_user_id = val
+  shizhuSelecting.value = false
+  tempShizhuId.value = null
+  const shizhu = shizhuList.value.find(item => item.id == val)
+  if (shizhu) {
+    selectedShizhuInfo.value = {
+      id: shizhu.id,
+      施主编号: shizhu.施主编号 || '',
+      施主姓名: shizhu.施主姓名 || ''
+    }
+    fillNamesFromShizhu(shizhu)
+  } else {
+    selectedShizhuInfo.value = null
+  }
+}
+
+const cancelShizhuSelect = () => {
+  shizhuSelecting.value = false
+  tempShizhuId.value = null
 }
 
 const resetForm = () => {
@@ -999,6 +1048,9 @@ const resetForm = () => {
     prt: '0',
     remarks: ''
   })
+  shizhuSelecting.value = false
+  tempShizhuId.value = null
+  selectedShizhuInfo.value = null
 }
 
 const handleAdd = async (row) => {
@@ -1007,13 +1059,20 @@ const handleAdd = async (row) => {
   if (fahuiList.value.length === 0) {
     await fetchFahuiList()
   }
-  await fetchShizhuList()
+  dialogVisible.value = true
   if (row) {
+    if (row.fahui_user_id) {
+      selectedShizhuInfo.value = {
+        id: row.fahui_user_id,
+        施主编号: row.施主编号 || '',
+        施主姓名: row.施主姓名 || ''
+      }
+    }
     const fahui = fahuiList.value.find(item => item.法会名称 === row.fahui_name)
     Object.assign(formData, {
       fahui_id: fahui ? fahui.id : (row.fahui_id || ''),
       fahui_name: row.fahui_name || '',
-      fahui_user_id: row.fahui_user_id || null,
+      fahui_user_id: row.fahui_user_id ? Number(row.fahui_user_id) : null,
       xm1: row.xm1 || '',
       xm2: row.xm2 || '',
       xm3: row.xm3 || '',
@@ -1028,15 +1087,7 @@ const handleAdd = async (row) => {
       yanwang: row.yanwang !== undefined ? String(row.yanwang) : '0',
       amount: row.amount || 0
     })
-    if (row.fahui_user_id && !shizhuList.value.find(item => item.id === row.fahui_user_id)) {
-      shizhuList.value.unshift({
-        id: row.fahui_user_id,
-        施主编号: row.施主编号 || '',
-        施主姓名: row.施主姓名 || ''
-      })
-    }
   }
-  dialogVisible.value = true
 }
 
 const handleFahuiSelect = (val) => {
@@ -1046,8 +1097,8 @@ const handleFahuiSelect = (val) => {
   }
 }
 
-const handleShizhuSelect = (val) => {
-  if (!val) {
+const applyShizhuById = (id) => {
+  if (!id) {
     formData.xm1 = ''
     formData.xm2 = ''
     formData.xm3 = ''
@@ -1060,7 +1111,7 @@ const handleShizhuSelect = (val) => {
     formData.xm10 = ''
     return
   }
-  const shizhu = shizhuList.value.find(item => item.id === val)
+  const shizhu = shizhuList.value.find(item => item.id == id)
   if (shizhu) {
     fillNamesFromShizhu(shizhu)
   }
@@ -1078,10 +1129,7 @@ const handleYanwangChange = () => {
   formData.xm9 = ''
   formData.xm10 = ''
   if (formData.fahui_user_id) {
-    const shizhu = shizhuList.value.find(item => item.id === formData.fahui_user_id)
-    if (shizhu) {
-      fillNamesFromShizhu(shizhu)
-    }
+    applyShizhuById(formData.fahui_user_id)
   }
 }
 
@@ -1287,7 +1335,7 @@ const handleSubmitAddShizhu = async () => {
         await fahuiUserApi.create(addShizhuFormData)
         ElMessage.success('施主创建成功')
         addShizhuDialogVisible.value = false
-        await fetchShizhuList(shizhuSearchKeyword.value)
+        await fetchShizhuList('')
         const newShizhu = shizhuList.value.find(item => item.施主编号 === addShizhuFormData.施主编号)
         if (newShizhu) {
           formData.fahui_user_id = newShizhu.id
