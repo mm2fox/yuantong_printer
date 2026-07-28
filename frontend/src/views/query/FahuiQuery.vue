@@ -829,6 +829,7 @@ const handleEdit = async (row) => {
     await fetchFahuiList()
   }
   dialogVisible.value = true
+  await nextTick()
   if (row.fahui_user_id) {
     selectedShizhuInfo.value = {
       id: row.fahui_user_id,
@@ -1060,6 +1061,7 @@ const handleAdd = async (row) => {
     await fetchFahuiList()
   }
   dialogVisible.value = true
+  await nextTick()
   if (row) {
     if (row.fahui_user_id) {
       selectedShizhuInfo.value = {

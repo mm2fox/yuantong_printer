@@ -872,8 +872,8 @@ const handleAdd = async () => {
   if (fahuiList.value.length === 0) {
     await fetchFahuiList()
   }
-  await fetchShizhuList('')
   dialogVisible.value = true
+  await nextTick()
 }
 
 const handleEdit = async (row) => {
@@ -883,6 +883,7 @@ const handleEdit = async (row) => {
     await fetchFahuiList()
   }
   dialogVisible.value = true
+  await nextTick()
   // 直接用行数据缓存当前施主信息，避免依赖 remote select 回显
   if (row.fahui_user_id) {
     selectedShizhuInfo.value = {

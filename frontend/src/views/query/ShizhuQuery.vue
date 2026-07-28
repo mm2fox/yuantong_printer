@@ -838,6 +838,7 @@ const handleAdd = async (row) => {
     await fetchFahuiList()
   }
   dialogVisible.value = true
+  await nextTick()
   if (row) {
     if (row.fahui_user_id) {
       selectedShizhuInfo.value = {
