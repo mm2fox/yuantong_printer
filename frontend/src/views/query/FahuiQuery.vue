@@ -623,7 +623,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, computed, nextTick } from 'vue'
+import { ref, reactive, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { fahuiRecordApi } from '@/api/fahuiRecords'
 import { fahuiInfoApi } from '@/api/fahuiInfo'
@@ -807,16 +807,10 @@ const handleEditFromPrint = () => {
 const handleEdit = async (row) => {
   resetForm()
   isEdit.value = true
-  // 确保法会列表已加载
   if (fahuiList.value.length === 0) {
     await fetchFahuiList()
   }
-  // 先加载施主列表，确保下拉框有数据
   await fetchShizhuList()
-  // 先打开弹窗，让 el-select 渲染
-  dialogVisible.value = true
-  // 等待弹窗渲染完成后再设置表单值，确保 el-select 能正确显示选中项
-  await nextTick()
   const fahui = fahuiList.value.find(item => item.法会名称 === row.fahui_name)
   Object.assign(formData, {
     id: row.id,
@@ -839,28 +833,14 @@ const handleEdit = async (row) => {
     djdate: row.djdate || '',
     remarks: row.remarks || ''
   })
-  // 确保选中的施主在下拉列表中
   if (row.fahui_user_id && !shizhuList.value.find(item => item.id === row.fahui_user_id)) {
     shizhuList.value.unshift({
       id: row.fahui_user_id,
       施主编号: row.施主编号 || '',
-      施主姓名: row.施主姓名 || '',
-      佛光注照一: row.xm1 || '',
-      佛光注照二: row.xm2 || '',
-      佛光注照三: row.xm3 || '',
-      佛光注照四: row.xm4 || '',
-      佛光接引一: row.xm1 || '',
-      佛光接引二: row.xm2 || '',
-      佛光接引三: row.xm3 || '',
-      佛光接引四: row.xm4 || '',
-      阳上一: row.xm5 || '',
-      阳上二: row.xm6 || '',
-      阳上三: row.xm7 || '',
-      阳上四: row.xm8 || '',
-      阳上五: row.xm9 || '',
-      阳上六: row.xm10 || ''
+      施主姓名: row.施主姓名 || ''
     })
   }
+  dialogVisible.value = true
 }
 
 const handleDelete = async (row) => {
@@ -971,7 +951,7 @@ const selectedShizhuName = computed(() => {
 const fetchShizhuList = async (keyword = '') => {
   shizhuLoading.value = true
   try {
-    const res = await fahuiUserApi.getList(keyword || undefined, 50)
+    const res = await fahuiUserApi.getList(keyword || undefined, 10000)
     shizhuList.value = res
   } catch (error) {
     console.error('获取施主列表失败:', error)
@@ -1015,16 +995,10 @@ const resetForm = () => {
 const handleAdd = async (row) => {
   resetForm()
   isEdit.value = false
-  // 确保法会列表已加载
   if (fahuiList.value.length === 0) {
     await fetchFahuiList()
   }
-  // 先加载施主列表，确保下拉框有数据
   await fetchShizhuList()
-  // 先打开弹窗，让 el-select 渲染
-  dialogVisible.value = true
-  // 等待弹窗渲染完成后再设置表单值，确保 el-select 能正确显示选中项
-  await nextTick()
   if (row) {
     const fahui = fahuiList.value.find(item => item.法会名称 === row.fahui_name)
     Object.assign(formData, {
@@ -1045,29 +1019,15 @@ const handleAdd = async (row) => {
       yanwang: row.yanwang !== undefined ? String(row.yanwang) : '0',
       amount: row.amount || 0
     })
-    // 确保选中的施主在下拉列表中
     if (row.fahui_user_id && !shizhuList.value.find(item => item.id === row.fahui_user_id)) {
       shizhuList.value.unshift({
         id: row.fahui_user_id,
         施主编号: row.施主编号 || '',
-        施主姓名: row.施主姓名 || '',
-        佛光注照一: row.xm1 || '',
-        佛光注照二: row.xm2 || '',
-        佛光注照三: row.xm3 || '',
-        佛光注照四: row.xm4 || '',
-        佛光接引一: row.xm1 || '',
-        佛光接引二: row.xm2 || '',
-        佛光接引三: row.xm3 || '',
-        佛光接引四: row.xm4 || '',
-        阳上一: row.xm5 || '',
-        阳上二: row.xm6 || '',
-        阳上三: row.xm7 || '',
-        阳上四: row.xm8 || '',
-        阳上五: row.xm9 || '',
-        阳上六: row.xm10 || ''
+        施主姓名: row.施主姓名 || ''
       })
     }
   }
+  dialogVisible.value = true
 }
 
 const handleFahuiSelect = (val) => {

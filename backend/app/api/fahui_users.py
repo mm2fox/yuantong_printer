@@ -15,12 +15,12 @@ router = APIRouter(prefix="/api/fahui-users", tags=["施主管理"])
 @router.get("", response_model=List[FahuiUserResponse])
 async def get_fahui_users(
     keyword: Optional[str] = Query(None, description="搜索关键词"),
-    limit: int = Query(50, description="返回数量限制", ge=1, le=500),
+    limit: int = Query(50, description="返回数量限制", ge=1, le=10000),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
     query = select(FahuiUser).where(FahuiUser.temple_id == current_user.temple_id)
-    
+
     if keyword:
         query = query.where(
             or_(
@@ -29,7 +29,8 @@ async def get_fahui_users(
                 FahuiUser.电话.contains(keyword)
             )
         )
-    
+
+    # 按id正序返回全部
     query = query.order_by(FahuiUser.id.desc()).limit(limit)
     result = await db.execute(query)
     users = result.scalars().all()
