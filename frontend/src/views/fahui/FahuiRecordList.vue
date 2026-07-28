@@ -155,7 +155,6 @@
                   >
                     <el-option v-for="item in fahuiList" :key="item.id" :label="item.法会名称" :value="item.法会名称" />
                   </el-select>
-                  <el-button @click="cancelFahuiSelect">取消</el-button>
                 </template>
                 <el-button type="primary" @click="handleOpenAddFahui">新增</el-button>
               </div>
@@ -202,7 +201,6 @@
                       :value="item.id"
                     />
                   </el-select>
-                  <el-button @click="cancelShizhuSelect">取消</el-button>
                 </template>
                 <el-button type="primary" @click="handleOpenAddShizhu">新增</el-button>
               </div>
