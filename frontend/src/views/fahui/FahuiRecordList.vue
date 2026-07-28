@@ -140,9 +140,9 @@
                     :model-value="displayFahuiLabel"
                     readonly
                     placeholder="请选择法会"
-                    style="flex: 1"
+                    style="flex: 1; cursor: pointer;"
+                    @click="openFahuiSelect"
                   />
-                  <el-button type="primary" @click="openFahuiSelect">选择</el-button>
                 </template>
                 <template v-else>
                   <el-select
@@ -179,9 +179,9 @@
                     :model-value="displayShizhuLabel"
                     readonly
                     placeholder="请选择施主"
-                    style="flex: 1"
+                    style="flex: 1; cursor: pointer;"
+                    @click="openShizhuSelect"
                   />
-                  <el-button type="primary" @click="openShizhuSelect">选择</el-button>
                 </template>
                 <template v-else>
                   <el-select
@@ -810,12 +810,10 @@ const openShizhuSelect = async () => {
   shizhuSelecting.value = true
   tempShizhuId.value = formData.fahui_user_id
   await fetchShizhuList('')
-  await nextTick()
   // 如果当前施主不在列表中，手动加入以便下拉能默认选中
   if (tempShizhuId.value && !shizhuList.value.find(item => item.id == tempShizhuId.value) && selectedShizhuInfo.value) {
     shizhuList.value.unshift({ ...selectedShizhuInfo.value })
   }
-  shizhuSelectRef.value?.focus?.()
 }
 
 const confirmShizhuSelect = (val) => {
@@ -1071,8 +1069,6 @@ const openFahuiSelect = async () => {
   }
   fahuiSelecting.value = true
   tempFahuiName.value = formData.fahui_name || ''
-  await nextTick()
-  fahuiSelectRef.value?.focus?.()
 }
 
 const confirmFahuiSelect = (val) => {

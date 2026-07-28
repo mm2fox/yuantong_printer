@@ -187,9 +187,9 @@
                     :model-value="displayFahuiLabel"
                     readonly
                     placeholder="请选择法会"
-                    style="flex: 1"
+                    style="flex: 1; cursor: pointer;"
+                    @click="openFahuiSelect"
                   />
-                  <el-button type="primary" @click="openFahuiSelect">选择</el-button>
                 </template>
                 <template v-else>
                   <el-select
@@ -226,9 +226,9 @@
                     :model-value="displayShizhuLabel"
                     readonly
                     placeholder="请选择施主"
-                    style="flex: 1"
+                    style="flex: 1; cursor: pointer;"
+                    @click="openShizhuSelect"
                   />
-                  <el-button type="primary" @click="openShizhuSelect">选择</el-button>
                 </template>
                 <template v-else>
                   <el-select

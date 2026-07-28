@@ -1,10 +1,10 @@
 {
-  "git_commit": "47c88bbdbf80775fc5a919c2f84e9a96d7c24f38",
+  "git_commit": "0e96311cc6a2aece3936ccc25614bcff4cb3c555",
   "git_branch": "main",
   "git_author": "mm2fox",
-  "git_message": "chore: 更新 build_info 和 国庆寺部署记录",
-  "git_date": "2026-07-28 19:17:38 +0800",
-  "version": "47c88bb",
-  "build_time": "2026-07-28T19:24:56.021745",
-  "change_summary": "47c88bb chore: 更新 build_info 和 国庆寺部署记录\n88f54bc fix: 法会名称下拉框在弹窗渲染后再赋值，解决回显空白\ne4fdc55 fix: 施主下拉框改为只读显示+点击切换搜索，解决remote模式回显空白\n87b16e6 fix: 回退el-select+remote模式，修复施主姓名为空时label显示空白\nfdd19a1 fix: 施主下拉框改用el-select-v2虚拟滚动，解决大数据量下选中回显空白\ne7a115d fix: 施主查询/法会登记新增时下拉框先加载数据再开弹窗，去掉remote模式\ndb24af7 fix: 施主列表limit从50改为10000，后端去掉无关键词时500条限制\nb9d69a5 fix: 弹窗先渲染再设值，解决el-select下拉框不显示选中项\n309e86d fix: 施主下拉框去掉remote模式改为filterable，页面加载时预加载施主列表\nd6b4f21 fix: 法会查询新增登记时下拉框先加载数据再打开弹窗\n95961f8 fix: 法会记录查询操作列加宽并固定右侧，避免按钮换行\nd3d5258 feat: 施主/法会管理功能优化及打印对齐修复\n419198d feat: 添加Excel粘贴录入功能及部署打包工具\nefc4bed fix: 修复BASE_PATH未定义导致load_build_version报错\ne850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
+  "git_message": "fix: 法会名称也改为只读显示+点击切换选择，彻底解决回显空白",
+  "git_date": "2026-07-28 19:27:42 +0800",
+  "version": "0e96311",
+  "build_time": "2026-07-28T19:38:02.301704",
+  "change_summary": "0e96311 fix: 法会名称也改为只读显示+点击切换选择，彻底解决回显空白\n47c88bb chore: 更新 build_info 和 国庆寺部署记录\n88f54bc fix: 法会名称下拉框在弹窗渲染后再赋值，解决回显空白\ne4fdc55 fix: 施主下拉框改为只读显示+点击切换搜索，解决remote模式回显空白\n87b16e6 fix: 回退el-select+remote模式，修复施主姓名为空时label显示空白\nfdd19a1 fix: 施主下拉框改用el-select-v2虚拟滚动，解决大数据量下选中回显空白\ne7a115d fix: 施主查询/法会登记新增时下拉框先加载数据再开弹窗，去掉remote模式\ndb24af7 fix: 施主列表limit从50改为10000，后端去掉无关键词时500条限制\nb9d69a5 fix: 弹窗先渲染再设值，解决el-select下拉框不显示选中项\n309e86d fix: 施主下拉框去掉remote模式改为filterable，页面加载时预加载施主列表\nd6b4f21 fix: 法会查询新增登记时下拉框先加载数据再打开弹窗\n95961f8 fix: 法会记录查询操作列加宽并固定右侧，避免按钮换行\nd3d5258 feat: 施主/法会管理功能优化及打印对齐修复\n419198d feat: 添加Excel粘贴录入功能及部署打包工具\nefc4bed fix: 修复BASE_PATH未定义导致load_build_version报错\ne850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
 }
