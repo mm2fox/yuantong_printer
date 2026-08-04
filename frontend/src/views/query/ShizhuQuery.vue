@@ -804,7 +804,6 @@ const formData = reactive({
 
 const formRules = {
   fahui_name: [{ required: true, message: '请选择法会', trigger: 'change' }],
-  fahui_user_id: [{ required: true, message: '请选择施主', trigger: 'change' }],
   paiwei_type: [{ required: true, message: '请选择牌位类型', trigger: 'change' }],
   amount: [{ required: true, message: '请输入金额', trigger: 'blur' }]
 }
