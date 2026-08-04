@@ -45,7 +45,7 @@ def load_config():
         "temple_name": "默认寺院",
         "temple_address": "",
         "admin_username": "admin",
-        "admin_password": "",
+        "admin_password": "admin123",
         "admin_real_name": "管理员",
         "port": 8080
     }

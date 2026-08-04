@@ -1127,9 +1127,7 @@ const addShizhuFormData = reactive({
   备注: ''
 })
 
-const addShizhuFormRules = {
-  施主姓名: [{ required: true, message: '请输入施主姓名', trigger: 'blur' }]
-}
+const addShizhuFormRules = {}
 
 const handleOpenAddShizhu = async () => {
   Object.assign(addShizhuFormData, {

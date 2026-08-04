@@ -144,6 +144,7 @@ const handleLogin = async () => {
         router.push('/query/fahui')
       } catch (error) {
         console.error('登录失败:', error)
+        ElMessage.error(error.response?.data?.detail || '登录失败，请检查用户名和密码')
       } finally {
         loading.value = false
       }

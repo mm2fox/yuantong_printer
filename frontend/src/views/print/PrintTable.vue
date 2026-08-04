@@ -609,9 +609,7 @@ const editAddShizhuFormData = reactive({
   佛光注照四: '',
   备注: ''
 })
-const editAddShizhuFormRules = {
-  施主姓名: [{ required: true, message: '请输入施主姓名', trigger: 'blur' }]
-}
+const editAddShizhuFormRules = {}
 
 
 

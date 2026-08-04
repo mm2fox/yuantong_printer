@@ -299,9 +299,7 @@ const formData = reactive({
   备注: ''
 })
 
-const formRules = {
-  施主姓名: [{ required: true, message: '请输入施主姓名', trigger: 'blur' }]
-}
+const formRules = {}
 
 const filteredData = computed(() => {
   let data = allData.value
