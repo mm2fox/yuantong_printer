@@ -393,11 +393,12 @@
         <el-table-column prop="yanwangLabel" label="类型" width="70" />
         <el-table-column prop="paiwei_type" label="牌位" width="70" />
         <el-table-column prop="amount" label="金额" width="80" />
-        <el-table-column prop="xm1" label="姓名1" width="100" show-overflow-tooltip />
-        <el-table-column prop="xm2" label="姓名2" width="100" show-overflow-tooltip />
-        <el-table-column prop="xm3" label="姓名3" width="100" show-overflow-tooltip />
-        <el-table-column prop="xm4" label="姓名4" width="100" show-overflow-tooltip />
-        <el-table-column prop="xm5" label="姓名5" width="100" show-overflow-tooltip />
+        <el-table-column prop="xm1" label="接引/注照1" width="110" show-overflow-tooltip />
+        <el-table-column prop="xm2" label="接引/注照2" width="110" show-overflow-tooltip />
+        <el-table-column prop="xm3" label="接引/注照3" width="110" show-overflow-tooltip />
+        <el-table-column prop="xm4" label="接引/注照4" width="110" show-overflow-tooltip />
+        <el-table-column prop="xm5" label="阳上1" width="100" show-overflow-tooltip />
+        <el-table-column prop="xm6" label="阳上2" width="100" show-overflow-tooltip />
       </el-table>
 
       <template #footer>
@@ -1147,41 +1148,107 @@ const parseBatchPaste = () => {
   for (const line of lines) {
     const cols = line.split('\t').map(c => c.trim())
 
-    if (cols.length < 4) {
-      ElMessage.warning(`数据列数不足（需要至少4列：类型、牌位、金额、姓名），跳过该行`)
-      continue
+    // 查找标记列（包含"往生/延生"+"牌"的列，如"往生，大牌位，长期"）
+    let markerIdx = -1
+    for (let i = cols.length - 1; i >= 0; i--) {
+      if (cols[i] && (cols[i].includes('往生') || cols[i].includes('延生')) && cols[i].includes('牌')) {
+        markerIdx = i
+        break
+      }
     }
 
-    const type = cols[2] || '延生'
-    const yanwang = type === '往生' ? 1 : 0
-    const paiwei = cols[3] || '中'
-    let paiweiType = '中牌'
-    if (['大', '中', '小'].includes(paiwei)) {
-      paiweiType = paiwei + '牌'
-    } else if (['大牌', '中牌', '小牌'].includes(paiwei)) {
-      paiweiType = paiwei
-    }
+    if (markerIdx >= 0) {
+      // 清明表格式：序号 | 阳上1 | 阳上2 | (空) | 接引1 | 接引2 | 接引3 | 标记
+      // 也可能从A列开始：凭证编号 | 序号 | 阳上1 | 阳上2 | (空) | 接引1 | 接引2 | 接引3 | 标记
+      const marker = cols[markerIdx]
+      const yanwang = marker.includes('往生') ? 1 : 0
 
-    const amountStr = cols[5] || ''
-    let amount = 0
-    if (amountStr && amountStr !== '长期' && !isNaN(parseFloat(amountStr))) {
-      amount = parseFloat(amountStr)
-    }
+      let paiweiType = '中牌'
+      if (marker.includes('大牌')) paiweiType = '大牌'
+      else if (marker.includes('中牌')) paiweiType = '中牌'
+      else if (marker.includes('小牌')) paiweiType = '小牌'
 
-    const row = {
-      yanwang,
-      yanwangLabel: type,
-      paiwei_type: paiweiType,
-      amount,
-      xm1: cols[8] || '',
-      xm2: cols[9] || '',
-      xm3: cols[10] || '',
-      xm4: cols[11] || '',
-      xm5: cols[12] || '',
-      xm: yanwang === 0 ? '佛光注照' : '佛光接引'
-    }
+      // 检测是否包含凭证编号列（A列，通常是科学计数法长数字）
+      const hasReceiptCol = /^2\.\d+e\+/i.test(cols[0]) || cols[0].length > 15
+      const base = hasReceiptCol ? 2 : 1
 
-    preview.push(row)
+      // 阳上列：base, base+1（阳上1, 阳上2）
+      // 空列：base+2
+      // 接引列：base+3, base+4, base+5（接引1, 接引2, 接引3）
+      const yangshang1 = cols[base] || ''
+      const yangshang2 = cols[base + 1] || ''
+      const jieyin1 = cols[base + 3] || ''
+      const jieyin2 = cols[base + 4] || ''
+      const jieyin3 = cols[base + 5] || ''
+
+      // 往生：xm1-4=接引(佛光接引), xm5-10=阳上
+      // 延生：xm1-5=佛光注照
+      let row
+      if (yanwang === 1) {
+        row = {
+          yanwang,
+          yanwangLabel: '往生',
+          paiwei_type: paiweiType,
+          amount: 0,
+          xm1: jieyin1,
+          xm2: jieyin2,
+          xm3: jieyin3,
+          xm4: '',
+          xm5: yangshang1,
+          xm6: yangshang2,
+          xm: '佛光接引'
+        }
+      } else {
+        row = {
+          yanwang,
+          yanwangLabel: '延生',
+          paiwei_type: paiweiType,
+          amount: 0,
+          xm1: yangshang1,
+          xm2: yangshang2,
+          xm3: jieyin1,
+          xm4: jieyin2,
+          xm5: jieyin3,
+          xm: '佛光注照'
+        }
+      }
+      preview.push(row)
+    } else {
+      // 法会常规表格式：计数 | 序号 | 类型 | 牌位 | 到期 | 金额 | 念名 | 名字计数 | 姓名1~5
+      if (cols.length < 4) {
+        continue
+      }
+
+      const type = cols[2] || '延生'
+      const yanwang = type === '往生' ? 1 : 0
+      const paiwei = cols[3] || '中'
+      let paiweiType = '中牌'
+      if (['大', '中', '小'].includes(paiwei)) {
+        paiweiType = paiwei + '牌'
+      } else if (['大牌', '中牌', '小牌'].includes(paiwei)) {
+        paiweiType = paiwei
+      }
+
+      const amountStr = cols[5] || ''
+      let amount = 0
+      if (amountStr && amountStr !== '长期' && !isNaN(parseFloat(amountStr))) {
+        amount = parseFloat(amountStr)
+      }
+
+      const row = {
+        yanwang,
+        yanwangLabel: type,
+        paiwei_type: paiweiType,
+        amount,
+        xm1: cols[8] || '',
+        xm2: cols[9] || '',
+        xm3: cols[10] || '',
+        xm4: cols[11] || '',
+        xm5: cols[12] || '',
+        xm: yanwang === 0 ? '佛光注照' : '佛光接引'
+      }
+      preview.push(row)
+    }
   }
 
   batchPastePreview.value = preview
