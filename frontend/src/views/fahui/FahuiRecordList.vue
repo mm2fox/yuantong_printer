@@ -1142,25 +1142,34 @@ const parseBatchPaste = () => {
     return
   }
 
-  const lines = raw.split('\n').filter(l => l.trim())
+  // 第一步：把所有行合并，再按\t打平为一维列数组，防止多行被合并成一行
+  const flatCols = raw.replace(/\r?\n/g, '\t').split('\t').map(c => c.trim())
+
+  // 查找所有 marker 列索引（包含"往生/延生"+"牌"）
+  const markerIndexes = []
+  for (let i = 0; i < flatCols.length; i++) {
+    const c = flatCols[i]
+    if (c && (c.includes('往生') || c.includes('延生')) && c.includes('牌')) {
+      markerIndexes.push(i)
+    }
+  }
+
   const preview = []
 
-  for (const line of lines) {
-    const cols = line.split('\t').map(c => c.trim())
+  if (markerIndexes.length > 0) {
+    // 清明表格式：将打平的列按每个 marker 向前切分为一条记录
+    // 一条记录结构：[可能的凭证编号] | 序号 | 阳上1 | 阳上2 | 空 | 接引1 | 接引2 | 接引3 | 标记
+    // 或者没有凭证编号：序号 | 阳上1 | 阳上2 | 空 | 接引1 | 接引2 | 接引3 | 标记
+    // 用 markerIndex 作为段尾，向前扫描段首（从上一个 marker 的下一个索引开始，或 0）
 
-    // 查找标记列（包含"往生/延生"+"牌"的列，如"往生，大牌位，长期"）
-    let markerIdx = -1
-    for (let i = cols.length - 1; i >= 0; i--) {
-      if (cols[i] && (cols[i].includes('往生') || cols[i].includes('延生')) && cols[i].includes('牌')) {
-        markerIdx = i
-        break
-      }
-    }
-
-    if (markerIdx >= 0) {
-      // 清明表格式：序号 | 阳上1 | 阳上2 | (空) | 接引1 | 接引2 | 接引3 | 标记
-      // 也可能从A列开始：凭证编号 | 序号 | 阳上1 | 阳上2 | (空) | 接引1 | 接引2 | 接引3 | 标记
-      const marker = cols[markerIdx]
+    for (let m = 0; m < markerIndexes.length; m++) {
+      const endIdx = markerIndexes[m]
+      const prevEndIdx = m > 0 ? markerIndexes[m - 1] : -1
+      const segmentStart = prevEndIdx + 1
+      // segment 为当前记录的所有列（不含前一个 marker，包含当前 marker）
+      const seg = flatCols.slice(segmentStart, endIdx + 1)
+      // seg 末尾是 marker
+      const marker = seg[seg.length - 1]
       const yanwang = marker.includes('往生') ? 1 : 0
 
       let paiweiType = '中牌'
@@ -1168,21 +1177,26 @@ const parseBatchPaste = () => {
       else if (marker.includes('中牌')) paiweiType = '中牌'
       else if (marker.includes('小牌')) paiweiType = '小牌'
 
-      // 检测是否包含凭证编号列（A列，通常是科学计数法长数字）
-      const hasReceiptCol = /^2\.\d+e\+/i.test(cols[0]) || cols[0].length > 15
-      const base = hasReceiptCol ? 2 : 1
+      // seg 去掉末尾 marker 后，反推阳上和接引的位置
+      // 预期结构（从 seg 末尾倒数）:
+      //  marker (已去掉)
+      //  -1: 接引3
+      //  -2: 接引2
+      //  -3: 接引1
+      //  -4: (空列)
+      //  -5: 阳上2
+      //  -6: 阳上1
+      //  -7: 序号
+      //  -8: 凭证编号（可选）
+      const body = seg.slice(0, -1)
+      const n = body.length
+      const jieyin3 = body[n - 1] || ''
+      const jieyin2 = body[n - 2] || ''
+      const jieyin1 = body[n - 3] || ''
+      // body[n-4] 是空列，忽略
+      const yangshang2 = body[n - 5] || ''
+      const yangshang1 = body[n - 6] || ''
 
-      // 阳上列：base, base+1（阳上1, 阳上2）
-      // 空列：base+2
-      // 接引列：base+3, base+4, base+5（接引1, 接引2, 接引3）
-      const yangshang1 = cols[base] || ''
-      const yangshang2 = cols[base + 1] || ''
-      const jieyin1 = cols[base + 3] || ''
-      const jieyin2 = cols[base + 4] || ''
-      const jieyin3 = cols[base + 5] || ''
-
-      // 往生：xm1-4=接引(佛光接引), xm5-10=阳上
-      // 延生：xm1-5=佛光注照
       let row
       if (yanwang === 1) {
         row = {
@@ -1213,11 +1227,13 @@ const parseBatchPaste = () => {
         }
       }
       preview.push(row)
-    } else {
-      // 法会常规表格式：计数 | 序号 | 类型 | 牌位 | 到期 | 金额 | 念名 | 名字计数 | 姓名1~5
-      if (cols.length < 4) {
-        continue
-      }
+    }
+  } else {
+    // 法会常规表格式：逐行解析（每行一条）
+    const lines = raw.split('\n').filter(l => l.trim())
+    for (const line of lines) {
+      const cols = line.split('\t').map(c => c.trim())
+      if (cols.length < 4) continue
 
       const type = cols[2] || '延生'
       const yanwang = type === '往生' ? 1 : 0
