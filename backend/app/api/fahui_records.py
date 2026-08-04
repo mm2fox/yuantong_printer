@@ -324,11 +324,14 @@ def _build_excel_workbook(records, columns, sheet_name, total_amount=None):
 
 
 def _workbook_to_streaming_response(wb, filename):
+    from urllib.parse import quote
     buf = io.BytesIO()
     wb.save(buf)
     buf.seek(0)
+    # HTTP 头只能用 latin-1 编码,中文文件名需用 RFC 5987 的 filename* 格式
+    encoded = quote(filename)
     headers = {
-        "Content-Disposition": f'attachment; filename="{filename}"'
+        "Content-Disposition": f"attachment; filename=\"export.xlsx\"; filename*=UTF-8''{encoded}"
     }
     return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
 
