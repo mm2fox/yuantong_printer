@@ -8,5 +8,7 @@ export const fahuiRecordApi = {
   update: (id, data) => api.put(`/fahui-records/${id}`, data),
   delete: (id) => api.delete(`/fahui-records/${id}`),
   queryByFahui: (params) => api.get('/fahui-records/query-by-fahui', { params }),
-  queryByShizhu: (params) => api.get('/fahui-records/query-by-shizhu', { params })
+  queryByShizhu: (params) => api.get('/fahui-records/query-by-shizhu', { params }),
+  exportByFahui: (params) => api.get('/fahui-records/export-by-fahui', { params, responseType: 'blob' }),
+  exportByShizhu: (params) => api.get('/fahui-records/export-by-shizhu', { params, responseType: 'blob' })
 }

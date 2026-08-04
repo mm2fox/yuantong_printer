@@ -1,8 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Body
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_, and_, func
 from typing import List, Optional
 from datetime import datetime
+import io
+import openpyxl
+from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
 from ..core.database import get_db
 from ..models.user import User
 from ..models.fahui_record import FahuiRecord
@@ -12,6 +17,38 @@ from ..schemas.fahui_record import FahuiRecordCreate, FahuiRecordUpdate, FahuiRe
 from .auth import get_current_user
 
 router = APIRouter(prefix="/api/fahui-records", tags=["法会流水"])
+
+
+def _record_to_dict(record, user=None):
+    return {
+        "id": record.id,
+        "fahui_user_id": record.fahui_user_id,
+        "fahui_id": record.fahui_id,
+        "fahui_name": record.fahui_name,
+        "座次": record.座次,
+        "amount": record.amount,
+        "paiwei_type": record.paiwei_type,
+        "yanwang": record.yanwang,
+        "xm1": record.xm1,
+        "xm2": record.xm2,
+        "xm3": record.xm3,
+        "xm4": record.xm4,
+        "xm5": record.xm5,
+        "xm6": record.xm6,
+        "xm7": record.xm7,
+        "xm8": record.xm8,
+        "xm9": record.xm9,
+        "xm10": record.xm10,
+        "xm": record.xm,
+        "djdate": record.djdate,
+        "经办人": record.经办人,
+        "prt": record.prt,
+        "remarks": record.remarks,
+        "施主姓名": record.施主姓名 or (user.施主姓名 if user else None),
+        "施主编号": record.施主编号 or (user.施主编号 if user else None),
+        "电话": user.电话 if user else None,
+        "功德主": user.功德主 if user else None
+    }
 
 @router.get("", response_model=List[FahuiRecordResponse])
 async def get_fahui_records(
@@ -28,23 +65,22 @@ async def get_fahui_records(
     records = result.scalars().all()
     return records
 
-@router.get("/query-by-fahui")
-async def query_by_fahui(
-    fahui_name: Optional[str] = Query(None),
-    keyword: Optional[str] = Query(None),
-    shizhu_name: Optional[str] = Query(None),
-    shizhu_code: Optional[str] = Query(None),
-    start_date: Optional[str] = Query(None),
-    end_date: Optional[str] = Query(None),
-    paiwei_type: Optional[str] = Query(None),
-    yanwang: Optional[int] = Query(None),
-    prt: Optional[int] = Query(None),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+async def _fetch_fahui_query(
+    db: AsyncSession,
+    temple_id,
+    fahui_name: Optional[str] = None,
+    keyword: Optional[str] = None,
+    shizhu_name: Optional[str] = None,
+    shizhu_code: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    paiwei_type: Optional[str] = None,
+    yanwang: Optional[int] = None,
+    prt: Optional[int] = None,
+    skip: int = 0,
+    limit: Optional[int] = None
 ):
-    base_where = [FahuiRecord.temple_id == current_user.temple_id]
+    base_where = [FahuiRecord.temple_id == temple_id]
 
     if fahui_name:
         base_where.append(FahuiRecord.fahui_name == fahui_name)
@@ -94,63 +130,59 @@ async def query_by_fahui(
 
     query = select(FahuiRecord, FahuiUser).join(
         FahuiUser, FahuiRecord.fahui_user_id == FahuiUser.id, isouter=True
-    ).where(where_clause).order_by(FahuiRecord.id.desc()).offset(skip).limit(limit)
+    ).where(where_clause).order_by(FahuiRecord.id.desc()).offset(skip)
+    if limit is not None:
+        query = query.limit(limit)
 
     result = await db.execute(query)
     rows = result.all()
 
-    records = []
-    for record, user in rows:
-        record_dict = {
-            "id": record.id,
-            "fahui_user_id": record.fahui_user_id,
-            "fahui_id": record.fahui_id,
-            "fahui_name": record.fahui_name,
-            "座次": record.座次,
-            "amount": record.amount,
-            "paiwei_type": record.paiwei_type,
-            "yanwang": record.yanwang,
-            "xm1": record.xm1,
-            "xm2": record.xm2,
-            "xm3": record.xm3,
-            "xm4": record.xm4,
-            "xm5": record.xm5,
-            "xm6": record.xm6,
-            "xm7": record.xm7,
-            "xm8": record.xm8,
-            "xm9": record.xm9,
-            "xm10": record.xm10,
-            "xm": record.xm,
-            "djdate": record.djdate,
-            "经办人": record.经办人,
-            "prt": record.prt,
-            "remarks": record.remarks,
-            "施主姓名": record.施主姓名 or (user.施主姓名 if user else None),
-            "施主编号": record.施主编号 or (user.施主编号 if user else None),
-            "电话": user.电话 if user else None,
-            "功德主": user.功德主 if user else None
-        }
-        records.append(record_dict)
+    records = [_record_to_dict(record, user) for record, user in rows]
+    return records, total, total_amount
 
+
+@router.get("/query-by-fahui")
+async def query_by_fahui(
+    fahui_name: Optional[str] = Query(None),
+    keyword: Optional[str] = Query(None),
+    shizhu_name: Optional[str] = Query(None),
+    shizhu_code: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    paiwei_type: Optional[str] = Query(None),
+    yanwang: Optional[int] = Query(None),
+    prt: Optional[int] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    records, total, total_amount = await _fetch_fahui_query(
+        db, current_user.temple_id,
+        fahui_name=fahui_name, keyword=keyword, shizhu_name=shizhu_name,
+        shizhu_code=shizhu_code, start_date=start_date, end_date=end_date,
+        paiwei_type=paiwei_type, yanwang=yanwang, prt=prt,
+        skip=skip, limit=limit
+    )
     return {
         "records": records,
         "total": total,
         "total_amount": total_amount
     }
 
-@router.get("/query-by-shizhu")
-async def query_by_shizhu(
-    shizhu_name: Optional[str] = Query(None),
-    shizhu_code: Optional[str] = Query(None),
-    phone: Optional[str] = Query(None),
-    start_date: Optional[str] = Query(None),
-    end_date: Optional[str] = Query(None),
-    skip: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user)
+
+async def _fetch_shizhu_query(
+    db: AsyncSession,
+    temple_id,
+    shizhu_name: Optional[str] = None,
+    shizhu_code: Optional[str] = None,
+    phone: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    skip: int = 0,
+    limit: Optional[int] = None
 ):
-    base_where = [FahuiRecord.temple_id == current_user.temple_id]
+    base_where = [FahuiRecord.temple_id == temple_id]
 
     if shizhu_name:
         base_where.append(FahuiRecord.施主姓名.contains(shizhu_name))
@@ -186,48 +218,208 @@ async def query_by_shizhu(
     sum_result = await db.execute(sum_base)
     total_amount = sum_result.scalar() or 0
 
-    query = query_base.order_by(FahuiRecord.id.desc()).offset(skip).limit(limit)
+    query = query_base.order_by(FahuiRecord.id.desc()).offset(skip)
+    if limit is not None:
+        query = query.limit(limit)
     result = await db.execute(query)
     rows = result.all()
 
-    records = []
-    for record, user in rows:
-        record_dict = {
-            "id": record.id,
-            "fahui_user_id": record.fahui_user_id,
-            "fahui_id": record.fahui_id,
-            "fahui_name": record.fahui_name,
-            "座次": record.座次,
-            "amount": record.amount,
-            "paiwei_type": record.paiwei_type,
-            "yanwang": record.yanwang,
-            "xm1": record.xm1,
-            "xm2": record.xm2,
-            "xm3": record.xm3,
-            "xm4": record.xm4,
-            "xm5": record.xm5,
-            "xm6": record.xm6,
-            "xm7": record.xm7,
-            "xm8": record.xm8,
-            "xm9": record.xm9,
-            "xm10": record.xm10,
-            "xm": record.xm,
-            "djdate": record.djdate,
-            "经办人": record.经办人,
-            "prt": record.prt,
-            "remarks": record.remarks,
-            "施主姓名": record.施主姓名 or (user.施主姓名 if user else None),
-            "施主编号": record.施主编号 or (user.施主编号 if user else None),
-            "电话": user.电话 if user else None,
-            "功德主": user.功德主 if user else None
-        }
-        records.append(record_dict)
+    records = [_record_to_dict(record, user) for record, user in rows]
+    return records, total, total_amount
 
+
+@router.get("/query-by-shizhu")
+async def query_by_shizhu(
+    shizhu_name: Optional[str] = Query(None),
+    shizhu_code: Optional[str] = Query(None),
+    phone: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=200),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    records, total, total_amount = await _fetch_shizhu_query(
+        db, current_user.temple_id,
+        shizhu_name=shizhu_name, shizhu_code=shizhu_code, phone=phone,
+        start_date=start_date, end_date=end_date,
+        skip=skip, limit=limit
+    )
     return {
         "records": records,
         "total": total,
         "total_amount": total_amount
     }
+
+
+def _build_excel_workbook(records, columns, sheet_name, total_amount=None):
+    """构建带样式的 Excel 工作簿。columns: [(表头, 取值函数或字段名), ...]"""
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet_name
+
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_fill = PatternFill(start_color="4472C4", end_color="4472C4", fill_type="solid")
+    header_align = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin = Side(border_style="thin", color="BFBFBF")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+    cell_align = Alignment(vertical="center", wrap_text=True)
+
+    # 表头
+    headers = [c[0] for c in columns]
+    ws.append(headers)
+    for col_idx in range(1, len(headers) + 1):
+        cell = ws.cell(row=1, column=col_idx)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        cell.border = border
+
+    # 数据行
+    for item in records:
+        row = []
+        for _, getter in columns:
+            if callable(getter):
+                row.append(getter(item))
+            else:
+                row.append(item.get(getter))
+        ws.append(row)
+
+    for row_idx in range(2, ws.max_row + 1):
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=row_idx, column=col_idx)
+            cell.alignment = cell_align
+            cell.border = border
+
+    # 合计行
+    if total_amount is not None:
+        total_row = ["合计"] + [None] * (len(headers) - 1)
+        ws.append(total_row)
+        total_cell = ws.cell(row=ws.max_row, column=1)
+        total_cell.font = Font(bold=True)
+        # 找到"金额"列填入合计
+        for col_idx, (header, _) in enumerate(columns, start=1):
+            if header == "金额":
+                amt_cell = ws.cell(row=ws.max_row, column=col_idx)
+                amt_cell.value = total_amount
+                amt_cell.font = Font(bold=True)
+        for col_idx in range(1, len(headers) + 1):
+            cell = ws.cell(row=ws.max_row, column=col_idx)
+            cell.fill = PatternFill(start_color="FFF2CC", end_color="FFF2CC", fill_type="solid")
+            cell.border = border
+
+    # 列宽自适应（粗略）
+    for col_idx, header in enumerate(headers, start=1):
+        max_len = len(str(header))
+        for row_idx in range(2, min(ws.max_row + 1, 102)):
+            val = ws.cell(row=row_idx, column=col_idx).value
+            if val is not None:
+                max_len = max(max_len, len(str(val)))
+        ws.column_dimensions[get_column_letter(col_idx)].width = min(max_len + 4, 40)
+
+    ws.row_dimensions[1].height = 24
+    ws.freeze_panes = "A2"
+    return wb
+
+
+def _workbook_to_streaming_response(wb, filename):
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    headers = {
+        "Content-Disposition": f'attachment; filename="{filename}"'
+    }
+    return StreamingResponse(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", headers=headers)
+
+
+def _fahui_export_columns():
+    return [
+        ("施主编号", "施主编号"),
+        ("施主姓名", "施主姓名"),
+        ("法会名称", "fahui_name"),
+        ("牌位类型", "paiwei_type"),
+        ("金额", "amount"),
+        ("类型", lambda r: "延生" if r.get("yanwang") == 0 else "往生"),
+        ("登记日期", "djdate"),
+        ("经办人", "经办人"),
+        ("打印状态", lambda r: "已打印" if r.get("prt") == 1 else "未打印"),
+        ("姓名1", "xm1"),
+        ("姓名2", "xm2"),
+        ("姓名3", "xm3"),
+        ("姓名4", "xm4"),
+        ("姓名5", "xm5"),
+        ("备注", "remarks"),
+    ]
+
+
+def _shizhu_export_columns():
+    return [
+        ("施主编号", "施主编号"),
+        ("施主姓名", "施主姓名"),
+        ("电话", "电话"),
+        ("法会名称", "fahui_name"),
+        ("牌位类型", "paiwei_type"),
+        ("金额", "amount"),
+        ("类型", lambda r: "延生" if r.get("yanwang") == 0 else "往生"),
+        ("登记日期", "djdate"),
+        ("经办人", "经办人"),
+        ("打印状态", lambda r: "已打印" if r.get("prt") == 1 else "未打印"),
+        ("姓名1", "xm1"),
+        ("姓名2", "xm2"),
+        ("姓名3", "xm3"),
+        ("姓名4", "xm4"),
+        ("姓名5", "xm5"),
+        ("备注", "remarks"),
+    ]
+
+
+@router.get("/export-by-fahui")
+async def export_by_fahui(
+    fahui_name: Optional[str] = Query(None),
+    keyword: Optional[str] = Query(None),
+    shizhu_name: Optional[str] = Query(None),
+    shizhu_code: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    paiwei_type: Optional[str] = Query(None),
+    yanwang: Optional[int] = Query(None),
+    prt: Optional[int] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    records, total, total_amount = await _fetch_fahui_query(
+        db, current_user.temple_id,
+        fahui_name=fahui_name, keyword=keyword, shizhu_name=shizhu_name,
+        shizhu_code=shizhu_code, start_date=start_date, end_date=end_date,
+        paiwei_type=paiwei_type, yanwang=yanwang, prt=prt,
+        skip=0, limit=None
+    )
+    wb = _build_excel_workbook(records, _fahui_export_columns(), "法会记录", total_amount=total_amount)
+    today = datetime.now().strftime("%Y%m%d")
+    return _workbook_to_streaming_response(wb, f"法会记录查询_{today}.xlsx")
+
+
+@router.get("/export-by-shizhu")
+async def export_by_shizhu(
+    shizhu_name: Optional[str] = Query(None),
+    shizhu_code: Optional[str] = Query(None),
+    phone: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    records, total, total_amount = await _fetch_shizhu_query(
+        db, current_user.temple_id,
+        shizhu_name=shizhu_name, shizhu_code=shizhu_code, phone=phone,
+        start_date=start_date, end_date=end_date,
+        skip=0, limit=None
+    )
+    wb = _build_excel_workbook(records, _shizhu_export_columns(), "施主法会记录", total_amount=total_amount)
+    today = datetime.now().strftime("%Y%m%d")
+    return _workbook_to_streaming_response(wb, f"施主查询_{today}.xlsx")
+
 
 @router.post("/batch")
 async def batch_create_fahui_records(

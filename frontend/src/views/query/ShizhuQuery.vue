@@ -35,6 +35,7 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button type="success" @click="handleExport" :loading="exportLoading">导出Excel</el-button>
         </el-form-item>
       </el-form>
       
@@ -698,6 +699,43 @@ const handleReset = () => {
   })
   currentPage.value = 1
   fetchData()
+}
+
+const exportLoading = ref(false)
+
+const handleExport = async () => {
+  if (total.value === 0) {
+    ElMessage.warning('没有数据可导出')
+    return
+  }
+
+  exportLoading.value = true
+  try {
+    const params = {}
+    if (searchForm.shizhu_name) params.shizhu_name = searchForm.shizhu_name
+    if (searchForm.shizhu_code) params.shizhu_code = searchForm.shizhu_code
+    if (searchForm.phone) params.phone = searchForm.phone
+    if (searchForm.start_date) params.start_date = searchForm.start_date
+    if (searchForm.end_date) params.end_date = searchForm.end_date
+
+    const blob = await fahuiRecordApi.exportByShizhu(params)
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `施主查询_${new Date().toISOString().slice(0, 10)}.xlsx`)
+    link.style.visibility = 'hidden'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+
+    ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  } finally {
+    exportLoading.value = false
+  }
 }
 
 const handleSizeChange = (val) => {

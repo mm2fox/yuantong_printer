@@ -59,7 +59,7 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">查询</el-button>
           <el-button @click="handleReset">重置</el-button>
-          <el-button type="success" @click="handleExport">导出</el-button>
+          <el-button type="success" @click="handleExport" :loading="exportLoading">导出Excel</el-button>
           <el-button type="warning" @click="handleBatchPrinted(1)" :disabled="selectedRows.length === 0">标记已打印</el-button>
           <el-button type="info" @click="handleBatchPrinted(0)" :disabled="selectedRows.length === 0">标记未打印</el-button>
         </el-form-item>
@@ -761,14 +761,17 @@ const handleReset = () => {
   fetchData()
 }
 
+const exportLoading = ref(false)
+
 const handleExport = async () => {
   if (total.value === 0) {
     ElMessage.warning('没有数据可导出')
     return
   }
 
+  exportLoading.value = true
   try {
-    const params = { skip: 0, limit: 100000 }
+    const params = {}
     if (searchForm.keyword) params.keyword = searchForm.keyword
     if (searchForm.fahui_name) params.fahui_name = searchForm.fahui_name
     if (searchForm.shizhu_name) params.shizhu_name = searchForm.shizhu_name
@@ -779,52 +782,23 @@ const handleExport = async () => {
     if (searchForm.yanwang !== null && searchForm.yanwang !== '') params.yanwang = searchForm.yanwang
     if (searchForm.prt !== null && searchForm.prt !== '') params.prt = searchForm.prt
 
-    const res = await fahuiRecordApi.queryByFahui(params)
-    const exportData = res.records || []
-
-    if (exportData.length === 0) {
-      ElMessage.warning('没有数据可导出')
-      return
-    }
-
-    const headers = ['施主编号', '施主姓名', '法会名称', '牌位类型', '金额', '类型', '登记日期', '经办人', '打印状态', '姓名1', '姓名2', '姓名3', '姓名4', '姓名5', '备注']
-    const rows = exportData.map(item => [
-      item.施主编号 || '',
-      item.施主姓名 || '',
-      item.fahui_name || '',
-      item.paiwei_type || '',
-      item.amount || 0,
-      item.yanwang === 0 ? '延生' : '往生',
-      item.djdate || '',
-      item.经办人 || '',
-      item.prt === 1 ? '已打印' : '未打印',
-      item.xm1 || '',
-      item.xm2 || '',
-      item.xm3 || '',
-      item.xm4 || '',
-      item.xm5 || '',
-      item.remarks || ''
-    ])
-
-    let csvContent = '\uFEFF' + headers.join(',') + '\n'
-    rows.forEach(row => {
-      csvContent += row.map(cell => `"${cell}"`).join(',') + '\n'
-    })
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
+    const blob = await fahuiRecordApi.exportByFahui(params)
     const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
     link.setAttribute('href', url)
-    link.setAttribute('download', `法会记录查询_${new Date().toISOString().slice(0, 10)}.csv`)
+    link.setAttribute('download', `法会记录查询_${new Date().toISOString().slice(0, 10)}.xlsx`)
     link.style.visibility = 'hidden'
     document.body.appendChild(link)
     link.click()
     document.body.removeChild(link)
+    URL.revokeObjectURL(url)
 
     ElMessage.success('导出成功')
   } catch (error) {
     console.error('导出失败:', error)
     ElMessage.error('导出失败')
+  } finally {
+    exportLoading.value = false
   }
 }
 
