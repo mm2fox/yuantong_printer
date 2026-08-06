@@ -146,6 +146,49 @@
               </el-col>
             </el-row>
             <el-row :gutter="16">
+              <el-col :span="24">
+                <el-form-item label="输出模式">
+                  <el-radio-group v-model="outputMode" @change="onOutputModeChange">
+                    <el-radio label="original">实际尺寸（PDF=模板尺寸，打印机走纸尺寸需=模板尺寸）</el-radio>
+                    <el-radio label="smallpaper">小纸A4对齐（打印机驱动选A4，实际送小纸，内容不缩放）</el-radio>
+                  </el-radio-group>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row v-if="layoutConfig.smallPaperOnA4" :gutter="16">
+              <el-col :span="12">
+                <el-form-item label="水平对齐">
+                  <el-radio-group v-model="layoutConfig.smallPaperAlign">
+                    <el-radio label="left">左</el-radio>
+                    <el-radio label="center">中</el-radio>
+                    <el-radio label="right">右</el-radio>
+                  </el-radio-group>
+                </el-form-item>
+              </el-col>
+              <el-col :span="12">
+                <el-form-item label="垂直对齐">
+                  <el-radio-group v-model="layoutConfig.smallPaperVAlign">
+                    <el-radio label="top">上</el-radio>
+                    <el-radio label="bottom">下</el-radio>
+                  </el-radio-group>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row v-if="layoutConfig.smallPaperOnA4" :gutter="16">
+              <el-col :span="24">
+                <span style="color: #909399; font-size: 12px; line-height: 32px">小纸A4对齐模式：PDF画布=A4，内容按上方模板尺寸（如87×220mm）不缩放绘制，偏移到小纸在A4走纸槽中的位置。打印机驱动选A4走纸，实际送小纸。水平/垂直对齐决定小纸在A4槽中的位置。预览中绿色虚线框=小纸实际位置。</span>
+              </el-col>
+            </el-row>
+            <el-row :gutter="16">
+              <el-col :span="24">
+                <el-form-item label="翻转">
+                  <el-checkbox v-model="layoutConfig.flipH">左右翻转</el-checkbox>
+                  <el-checkbox v-model="layoutConfig.flipV">上下翻转</el-checkbox>
+                  <span style="color: #909399; font-size: 12px; margin-left: 12px;">不同打印机送纸方向不同，可能导致实际打印结果和预览呈镜像或颠倒。勾选对应翻转可抵消打印机方向差异。</span>
+                </el-form-item>
+              </el-col>
+            </el-row>
+            <el-row :gutter="16">
               <el-col :span="8">
                 <el-form-item label="打印上偏移">
                   <el-input-number v-model="layoutConfig.printOffsetY" :min="-100" :max="100" style="width: 100%" />
@@ -172,6 +215,10 @@
                 <el-slider v-model="layoutConfig.nameCharSpacing" :min="1.0" :max="3.0" :step="0.1" :show-input="true" :show-input-controls="false" input-size="small" />
               </div>
             </div>
+            <el-form-item label="自动补齐">
+              <el-switch v-model="layoutConfig.autoPadNames" active-text="对齐补空格" inactive-text="保留原始" />
+              <span style="margin-left: 8px; color: #909399; font-size: 12px;">关闭后姓名按原始内容打印，不自动补空格对齐</span>
+            </el-form-item>
             <el-row :gutter="16">
               <el-col :span="12">
                 <el-form-item label="区域上边距">
@@ -209,10 +256,18 @@
                   <el-slider v-model="layoutConfig.yangshangFontSize" :min="10" :max="60" :show-input="true" :show-input-controls="false" input-size="small" />
                 </div>
                 <div class="slider-item">
-                  <span class="slider-label">阳上间距</span>
+                  <span class="slider-label">横向间距</span>
                   <el-slider v-model="layoutConfig.yangshangSpacing" :min="0" :max="40" :show-input="true" :show-input-controls="false" input-size="small" />
                 </div>
+                <div class="slider-item">
+                  <span class="slider-label">纵向间距</span>
+                  <el-slider v-model="layoutConfig.yangshangCharSpacing" :min="1.0" :max="3.0" :step="0.1" :show-input="true" :show-input-controls="false" input-size="small" />
+                </div>
               </div>
+              <el-form-item label="自动补齐">
+                <el-switch v-model="layoutConfig.autoPadYangshang" active-text="对齐补空格" inactive-text="保留原始" />
+                <span style="margin-left: 8px; color: #909399; font-size: 12px;">关闭后阳上按原始内容打印，不自动补空格对齐</span>
+              </el-form-item>
               <el-row :gutter="16">
                 <el-col :span="12">
                   <el-form-item label="区域上边距">
@@ -228,6 +283,12 @@
                 </el-col>
               </el-row>
               <el-row :gutter="16">
+                <el-col :span="12">
+                  <el-form-item label="区域宽度">
+                    <el-slider v-model="layoutConfig.yangshangWidthPct" :min="10" :max="100" :show-input="true" :show-input-controls="false" input-size="small" />
+                    <span class="unit">%页宽</span>
+                  </el-form-item>
+                </el-col>
                 <el-col :span="12">
                   <el-form-item label="区域高度">
                     <el-slider v-model="layoutConfig.yangshangHeightPct" :min="10" :max="100" :show-input="true" :show-input-controls="false" input-size="small" />
@@ -264,6 +325,7 @@
                 <el-checkbox label="姓名" value="shizhu_name" />
                 <el-checkbox label="座号" value="seat" />
                 <el-checkbox label="法会名称" value="fahui_name" />
+                <el-checkbox v-if="isWangSheng" label="阳上" value="yangshang" />
               </el-checkbox-group>
             </el-form-item>
             <el-form-item label="备注">
@@ -282,19 +344,23 @@
           <div class="preview-container">
             <div class="preview-page-wrapper" :style="previewWrapperStyle">
               <div class="preview-page" :style="previewPageStyle">
-                <img v-if="layoutConfig.backgroundImage" :src="layoutConfig.backgroundImage" class="preview-bg-image" :style="{ opacity: layoutConfig.backgroundOpacity / 100 }" />
-                <div class="preview-content" :style="{ fontFamily: layoutConfig.fontFamily }">
-                  <div v-if="isWangSheng && displayItems.includes('yangshang')" class="preview-yangshang-area" :style="yangshangAreaStyle">
-                    <div :style="{ writingMode: 'vertical-rl', fontSize: layoutConfig.yangshangFontSize + 'px', lineHeight: '1.2' }">阳上</div>
-                    <div v-for="(name, idx) in sampleYangshangNames" :key="'ys-'+idx" :style="{ writingMode: 'vertical-rl', fontSize: layoutConfig.yangshangFontSize + 'px', lineHeight: '1.2', letterSpacing: '0.05em' }">{{ name }}</div>
+                <div class="small-paper-indicator" :style="tlSmallPaperIndicatorStyle"></div>
+                <div class="preview-scaler" :style="tlPreviewScalerStyle">
+                  <img v-if="layoutConfig.backgroundImage" :src="layoutConfig.backgroundImage" class="preview-bg-image" :style="{ opacity: layoutConfig.backgroundOpacity / 100 }" />
+                  <div class="preview-content" :style="{ fontFamily: layoutConfig.fontFamily }">
+                    <div v-if="isWangSheng && displayItems.includes('yangshang')" class="preview-yangshang-area" :style="yangshangAreaStyle">
+                    <div v-for="(name, idx) in alignedSampleYangshangNames" :key="'ys-'+idx" :style="yangshangItemStyle" class="editable-cell" contenteditable="plaintext-only" @focus="onSampleFocus($event, idx, 'yangshang')" @blur="onSampleBlur($event, idx, 'yangshang')">{{ name }}</div>
+                    <div class="add-name-btn" :style="{ writingMode: 'vertical-rl', fontSize: layoutConfig.yangshangFontSize + 'px', lineHeight: '1.2', color: '#c0c4cc', cursor: 'pointer', border: '1px dashed #dcdfe6', padding: '2px 4px' }" @click="addSampleName('yangshang')">+ 添加</div>
                   </div>
-                  <div class="preview-names-area" :style="namesAreaStyle">
-                    <div v-for="(name, idx) in alignedSampleNames" :key="'n-'+idx" :style="nameItemStyle">{{ name }}</div>
-                  </div>
-                  <div v-if="displayItems.includes('seat') || displayItems.includes('fahui_name') || displayItems.includes('shizhu_name')" class="preview-bottom" :style="bottomAreaStyle">
-                    <span v-if="displayItems.includes('shizhu_name')">{{ sampleData.shizhu_name }} </span>
-                    <span v-if="displayItems.includes('fahui_name')">{{ sampleData.fahui_name }} </span>
-                    <span v-if="displayItems.includes('seat')">{{ sampleData.seat }}</span>
+                    <div class="preview-names-area" :style="namesAreaStyle">
+                      <div v-for="(name, idx) in alignedSampleNames" :key="'n-'+idx" :style="nameItemStyle" class="editable-cell" contenteditable="plaintext-only" @focus="onSampleFocus($event, idx, 'name')" @blur="onSampleBlur($event, idx, 'name')">{{ name }}</div>
+                      <div class="add-name-btn" :style="nameItemStyle" style="color: #c0c4cc; cursor: pointer; border: 1px dashed #dcdfe6; padding: 2px 4px;" @click="addSampleName('name')">+ 添加</div>
+                    </div>
+                    <div v-if="displayItems.includes('seat') || displayItems.includes('fahui_name') || displayItems.includes('shizhu_name')" class="preview-bottom" :style="bottomAreaStyle">
+                      <span v-if="displayItems.includes('shizhu_name')" class="editable-cell" contenteditable="plaintext-only" @blur="onBottomBlur($event, 'shizhu_name')">{{ sampleData.shizhu_name }} </span>
+                      <span v-if="displayItems.includes('fahui_name')" class="editable-cell" contenteditable="plaintext-only" @blur="onBottomBlur($event, 'fahui_name')">{{ sampleData.fahui_name }} </span>
+                      <span v-if="displayItems.includes('seat')" class="editable-cell" contenteditable="plaintext-only" @blur="onBottomBlur($event, 'seat')">{{ sampleData.seat }}</span>
+                    </div>
                   </div>
                 </div>
                 <svg v-if="showRuler" class="ruler-overlay" :width="previewPageStyle.width" :height="previewPageStyle.height" xmlns="http://www.w3.org/2000/svg">
@@ -370,19 +436,21 @@
       <div class="preview-container">
         <div class="preview-page-wrapper" :style="previewWrapperStyleForDialog">
           <div class="preview-page" :style="previewPageStyleForDialog">
-            <img v-if="previewLayoutConfig.backgroundImage" :src="previewLayoutConfig.backgroundImage" class="preview-bg-image" :style="{ opacity: previewLayoutConfig.backgroundOpacity / 100 }" />
-            <div class="preview-content" :style="{ fontFamily: previewLayoutConfig.fontFamily }">
-              <div v-if="previewIsWangSheng && previewDisplayItems.includes('yangshang')" class="preview-yangshang-area" :style="getYangshangAreaStyle(previewLayoutConfig)">
-                <div :style="{ writingMode: 'vertical-rl', fontSize: previewLayoutConfig.yangshangFontSize + 'px', lineHeight: '1.2' }">阳上</div>
-                <div v-for="(name, idx) in previewYangshangNames" :key="'ys-'+idx" :style="{ writingMode: 'vertical-rl', fontSize: previewLayoutConfig.yangshangFontSize + 'px', lineHeight: '1.2', letterSpacing: '0.05em' }">{{ name }}</div>
+            <div class="small-paper-indicator" :style="dialogSmallPaperIndicatorStyle"></div>
+            <div class="preview-scaler" :style="previewScalerStyleForDialog">
+              <img v-if="previewLayoutConfig.backgroundImage" :src="previewLayoutConfig.backgroundImage" class="preview-bg-image" :style="{ opacity: previewLayoutConfig.backgroundOpacity / 100 }" />
+              <div class="preview-content" :style="{ fontFamily: previewLayoutConfig.fontFamily }">
+                <div v-if="previewIsWangSheng && previewDisplayItems.includes('yangshang')" class="preview-yangshang-area" :style="getYangshangAreaStyle(previewLayoutConfig)">
+                <div v-for="(name, idx) in alignedPreviewYangshangNames" :key="'ys-'+idx" :style="getYangshangItemStyle(previewLayoutConfig)">{{ name }}</div>
               </div>
-              <div class="preview-names-area" :style="getNamesAreaStyle(previewLayoutConfig)">
-                <div v-for="(name, idx) in alignedPreviewNames" :key="'n-'+idx" :style="getNameItemStyle(previewLayoutConfig)">{{ name }}</div>
-              </div>
-              <div v-if="previewDisplayItems.includes('seat') || previewDisplayItems.includes('fahui_name') || previewDisplayItems.includes('shizhu_name')" class="preview-bottom" :style="getBottomAreaStyle(previewLayoutConfig)">
-                <span v-if="previewDisplayItems.includes('shizhu_name')">{{ sampleData.shizhu_name }} </span>
-                <span v-if="previewDisplayItems.includes('fahui_name')">{{ sampleData.fahui_name }} </span>
-                <span v-if="previewDisplayItems.includes('seat')">{{ sampleData.seat }}</span>
+                <div class="preview-names-area" :style="getNamesAreaStyle(previewLayoutConfig)">
+                  <div v-for="(name, idx) in alignedPreviewNames" :key="'n-'+idx" :style="getNameItemStyle(previewLayoutConfig)">{{ name }}</div>
+                </div>
+                <div v-if="previewDisplayItems.includes('seat') || previewDisplayItems.includes('fahui_name') || previewDisplayItems.includes('shizhu_name')" class="preview-bottom" :style="getBottomAreaStyle(previewLayoutConfig)">
+                  <span v-if="previewDisplayItems.includes('shizhu_name')">{{ sampleData.shizhu_name }} </span>
+                  <span v-if="previewDisplayItems.includes('fahui_name')">{{ sampleData.fahui_name }} </span>
+                  <span v-if="previewDisplayItems.includes('seat')">{{ sampleData.seat }}</span>
+                </div>
               </div>
             </div>
             <svg v-if="previewDialogShowRuler" class="ruler-overlay" :width="previewPageStyleForDialog.width" :height="previewPageStyleForDialog.height" xmlns="http://www.w3.org/2000/svg">
@@ -466,16 +534,28 @@ const formData = reactive({
 const defaultLayoutConfig = {
   pageWidth: 210,
   pageHeight: 297,
+  smallPaperOnA4: false,
+  smallPaperAlign: 'center',
+  smallPaperVAlign: 'top',
+  flipH: false,
+  flipV: false,
   fontFamily: 'STXingkai',
   nameFontSize: 52,
   nameSpacing: 20,
   nameCharSpacing: 1.3,
+  autoPadNames: true,
   namesTopPct: 25,
   namesLeftPct: 10,
   namesWidthPct: 80,
   namesHeightPct: 55,
   yangshangFontSize: 18,
   yangshangSpacing: 5,
+  yangshangCharSpacing: 1.3,
+  autoPadYangshang: true,
+  yangshangTopPct: 25,
+  yangshangLeftPct: 2,
+  yangshangWidthPct: 20,
+  yangshangHeightPct: 55,
   seatFontSize: 24,
   bottomTopPct: 90,
   bottomLeftPct: 50,
@@ -488,20 +568,34 @@ const defaultLayoutConfig = {
 
 const layoutConfig = reactive({ ...defaultLayoutConfig })
 
+// 输出模式：original=实际尺寸, smallpaper=小纸A4对齐
+const outputMode = computed({
+  get: () => {
+    if (layoutConfig.smallPaperOnA4) return 'smallpaper'
+    return 'original'
+  },
+  set: (val) => {
+    layoutConfig.smallPaperOnA4 = (val === 'smallpaper')
+  }
+})
+const onOutputModeChange = (val) => {
+  layoutConfig.smallPaperOnA4 = (val === 'smallpaper')
+}
+
 const contentTemplate = reactive({
   namesTitle: '佛光注照'
 })
 
 const displayItems = ref(['seat', 'fahui_name'])
 
-const sampleData = {
+const sampleData = reactive({
   fahui_name: '示例法会',
   seat: '0001',
   shizhu_name: '张施主',
   names_yansheng: ['张三', '李四', '王五'],
-  names_wangsheng_jieyin: ['赵六', '钱七', '孙八'],
-  names_wangsheng_yangshang: ['周九', '吴十']
-}
+  names_wangsheng_jieyin: ['赵六', '钱七', '孙八', '李九'],
+  names_wangsheng_yangshang: ['周一', '吴二', '郑三']
+})
 
 const isWangSheng = computed(() => formData.模板类型 === '往生牌位')
 
@@ -514,6 +608,40 @@ const sampleYangshangNames = computed(() => {
   if (!isWangSheng.value) return []
   return sampleData.names_wangsheng_yangshang
 })
+
+// 预览区直接编辑示例数据
+const onSampleFocus = (e, idx, type) => {
+  let arr
+  if (type === 'name') arr = sampleNames.value
+  else if (type === 'yangshang') arr = sampleYangshangNames.value
+  if (arr) e.target.textContent = arr[idx] || ''
+}
+
+const onSampleBlur = (e, idx, type) => {
+  const newText = e.target.textContent.trim()
+  let arr
+  if (type === 'name') arr = sampleNames.value
+  else if (type === 'yangshang') arr = sampleYangshangNames.value
+  if (!arr) return
+  if (newText) {
+    arr[idx] = newText
+  } else {
+    arr.splice(idx, 1)
+  }
+}
+
+const onBottomBlur = (e, field) => {
+  sampleData[field] = e.target.textContent.trim()
+}
+
+const addSampleName = (type) => {
+  if (type === 'name') {
+    if (isWangSheng.value) sampleData.names_wangsheng_jieyin.push('新名')
+    else sampleData.names_yansheng.push('新名')
+  } else if (type === 'yangshang') {
+    sampleData.names_wangsheng_yangshang.push('新名')
+  }
+}
 
 const splitNameSuffix = (name) => {
   if (!name) return { namePart: '', suffix: '' }
@@ -555,8 +683,29 @@ const padNamePart = (namePart, maxLen) => {
 }
 
 const alignedSampleNames = computed(() => {
+  if (layoutConfig.autoPadNames === false) {
+    return sampleNames.value
+  }
   return parsedSampleNames.value.map(parsed => {
     const padded = padNamePart(parsed.namePart, maxSampleNamePartLen.value)
+    return padded + (parsed.suffix ? parsed.suffix : '')
+  })
+})
+
+const parsedSampleYangshangNames = computed(() => {
+  return sampleYangshangNames.value.map(n => splitNameSuffix(n))
+})
+
+const maxSampleYangshangNamePartLen = computed(() => {
+  return Math.max(...parsedSampleYangshangNames.value.map(n => n.namePart.length), 0)
+})
+
+const alignedSampleYangshangNames = computed(() => {
+  if (layoutConfig.autoPadYangshang === false) {
+    return sampleYangshangNames.value
+  }
+  return parsedSampleYangshangNames.value.map(parsed => {
+    const padded = padNamePart(parsed.namePart, maxSampleYangshangNamePartLen.value)
     return padded + (parsed.suffix ? parsed.suffix : '')
   })
 })
@@ -570,8 +719,29 @@ const maxPreviewNamePartLen = computed(() => {
 })
 
 const alignedPreviewNames = computed(() => {
+  if (previewLayoutConfig.autoPadNames === false) {
+    return previewNames.value
+  }
   return parsedPreviewNames.value.map(parsed => {
     const padded = padNamePart(parsed.namePart, maxPreviewNamePartLen.value)
+    return padded + (parsed.suffix ? parsed.suffix : '')
+  })
+})
+
+const parsedPreviewYangshangNames = computed(() => {
+  return previewYangshangNames.value.map(n => splitNameSuffix(n))
+})
+
+const maxPreviewYangshangNamePartLen = computed(() => {
+  return Math.max(...parsedPreviewYangshangNames.value.map(n => n.namePart.length), 0)
+})
+
+const alignedPreviewYangshangNames = computed(() => {
+  if (previewLayoutConfig.autoPadYangshang === false) {
+    return previewYangshangNames.value
+  }
+  return parsedPreviewYangshangNames.value.map(parsed => {
+    const padded = padNamePart(parsed.namePart, maxPreviewYangshangNamePartLen.value)
     return padded + (parsed.suffix ? parsed.suffix : '')
   })
 })
@@ -579,6 +749,7 @@ const alignedPreviewNames = computed(() => {
 const namesAreaStyle = computed(() => getNamesAreaStyle(layoutConfig))
 const yangshangAreaStyle = computed(() => getYangshangAreaStyle(layoutConfig))
 const nameItemStyle = computed(() => getNameItemStyle(layoutConfig))
+const yangshangItemStyle = computed(() => getYangshangItemStyle(layoutConfig))
 const bottomAreaStyle = computed(() => getBottomAreaStyle(layoutConfig))
 
 const getNamesAreaStyle = (cfg) => {
@@ -607,6 +778,7 @@ const getYangshangAreaStyle = (cfg) => {
     position: 'absolute',
     top: (cfg.yangshangTopPct ?? 25) + offsetPct + '%',
     left: (cfg.yangshangLeftPct ?? 2) + '%',
+    width: (cfg.yangshangWidthPct ?? 20) + '%',
     height: (cfg.yangshangHeightPct ?? 55) + '%',
     display: 'flex',
     flexDirection: 'row-reverse',
@@ -614,6 +786,14 @@ const getYangshangAreaStyle = (cfg) => {
     boxSizing: 'border-box'
   }
 }
+
+const getYangshangItemStyle = (cfg) => ({
+  writingMode: 'vertical-rl',
+  fontSize: (cfg.yangshangFontSize || 18) + 'px',
+  lineHeight: '1.2',
+  letterSpacing: ((cfg.yangshangCharSpacing || 1.3) - 1.0) + 'em',
+  margin: '0 ' + ((cfg.yangshangSpacing || 5) / 2) + 'px'
+})
 
 const getNameItemStyle = (cfg) => ({
   writingMode: 'vertical-rl',
@@ -671,6 +851,74 @@ function applyCalibrationY() {
 }
 
 const BASE_PX_PER_MM = 96 / 25.4
+const A4_W_MM = 210
+const A4_H_MM = 297
+
+// A4画布模式（小纸A4）用A4，否则用模板尺寸
+const tlUseA4Canvas = computed(() => layoutConfig.smallPaperOnA4)
+const tlEffectiveWMm = computed(() => tlUseA4Canvas.value ? A4_W_MM : (layoutConfig.pageWidth || 210))
+const tlEffectiveHMm = computed(() => tlUseA4Canvas.value ? A4_H_MM : (layoutConfig.pageHeight || 297))
+
+// 内容缩放层：与后端逻辑一致
+// - 默认模式：内容撑满预览页（模板原尺寸）
+// - 小纸A4模式：内容不缩放，偏移到小纸在A4走纸槽中的位置（水平+垂直对齐）
+const tlPreviewScalerStyle = computed(() => {
+  const lwMm = layoutConfig.pageWidth || 210
+  const lhMm = layoutConfig.pageHeight || 297
+  if (!tlUseA4Canvas.value) {
+    return { width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }
+  }
+  // 小纸A4模式：不缩放，偏移到小纸位置
+  const align = layoutConfig.smallPaperAlign || 'center'
+  let offsetXmm
+  if (align === 'left') {
+    offsetXmm = 0
+  } else if (align === 'right') {
+    offsetXmm = A4_W_MM - lwMm
+  } else {
+    offsetXmm = (A4_W_MM - lwMm) / 2
+  }
+  // CSS y 向下：top=小纸顶部贴A4顶部 → offsetYmm=0；bottom=小纸底部贴A4底部 → offsetYmm=A4高度-小纸高度
+  const vAlign = layoutConfig.smallPaperVAlign || 'top'
+  const offsetYmm = vAlign === 'bottom' ? (A4_H_MM - lhMm) : 0
+  return {
+    width: (lwMm * BASE_PX_PER_MM) + 'px',
+    height: (lhMm * BASE_PX_PER_MM) + 'px',
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    transform: `translate(${offsetXmm * BASE_PX_PER_MM}px, ${offsetYmm * BASE_PX_PER_MM}px)`,
+    transformOrigin: 'top left'
+  }
+})
+
+// 小纸位置指示框（小纸A4模式下显示小纸在A4走纸槽中的位置）
+const tlSmallPaperIndicatorStyle = computed(() => {
+  if (!layoutConfig.smallPaperOnA4) return { display: 'none' }
+  const lwMm = layoutConfig.pageWidth || 210
+  const lhMm = layoutConfig.pageHeight || 297
+  const align = layoutConfig.smallPaperAlign || 'center'
+  let offsetXmm
+  if (align === 'left') {
+    offsetXmm = 0
+  } else if (align === 'right') {
+    offsetXmm = A4_W_MM - lwMm
+  } else {
+    offsetXmm = (A4_W_MM - lwMm) / 2
+  }
+  const vAlign = layoutConfig.smallPaperVAlign || 'top'
+  const offsetYmm = vAlign === 'bottom' ? (A4_H_MM - lhMm) : 0
+  return {
+    position: 'absolute',
+    top: (offsetYmm * BASE_PX_PER_MM) + 'px',
+    left: (offsetXmm * BASE_PX_PER_MM) + 'px',
+    width: (lwMm * BASE_PX_PER_MM) + 'px',
+    height: (lhMm * BASE_PX_PER_MM) + 'px',
+    border: '2px dashed #67c23a',
+    pointerEvents: 'none',
+    zIndex: 5
+  }
+})
 
 const tlPxPerMmX = computed(() => BASE_PX_PER_MM)
 const tlPxPerMmY = computed(() => BASE_PX_PER_MM)
@@ -691,8 +939,8 @@ const calBarStyleY = computed(() => ({
 
 const tlRulerTicks = computed(() => {
   const pmm = BASE_PX_PER_MM
-  const wMm = layoutConfig.pageWidth || 210
-  const hMm = layoutConfig.pageHeight || 297
+  const wMm = tlEffectiveWMm.value
+  const hMm = tlEffectiveHMm.value
   const ticks = []
   for (let mm = 0; mm <= wMm; mm += 10) {
     ticks.push({ type: 'h', mm, x: mm * pmm, major: mm % 50 === 0 })
@@ -705,10 +953,10 @@ const tlRulerTicks = computed(() => {
 
 const tlGuideLines = computed(() => {
   const pmm = BASE_PX_PER_MM
-  const w = layoutConfig.pageWidth * pmm
-  const h = layoutConfig.pageHeight * pmm
-  const wMm = layoutConfig.pageWidth || 210
-  const hMm = layoutConfig.pageHeight || 297
+  const wMm = tlEffectiveWMm.value
+  const hMm = tlEffectiveHMm.value
+  const w = wMm * pmm
+  const h = hMm * pmm
   const lines = []
   for (let cm = 1; cm < wMm / 10; cm++) {
     const x = cm * 10 * pmm
@@ -722,19 +970,23 @@ const tlGuideLines = computed(() => {
 })
 
 const previewPageStyle = computed(() => {
-  const w = layoutConfig.pageWidth * BASE_PX_PER_MM
-  const h = layoutConfig.pageHeight * BASE_PX_PER_MM
+  const w = tlEffectiveWMm.value * BASE_PX_PER_MM
+  const h = tlEffectiveHMm.value * BASE_PX_PER_MM
+  const fx = layoutConfig.flipH ? -1 : 1
+  const fy = layoutConfig.flipV ? -1 : 1
+  const tx = layoutConfig.flipH ? w : 0
+  const ty = layoutConfig.flipV ? h : 0
   return {
     width: w + 'px',
     height: h + 'px',
-    transform: `scale(${calScaleX.value}, ${calScaleY.value})`,
+    transform: `translate(${tx}px, ${ty}px) scale(${calScaleX.value * fx}, ${calScaleY.value * fy})`,
     transformOrigin: 'top left'
   }
 })
 
 const previewWrapperStyle = computed(() => {
-  const w = layoutConfig.pageWidth * BASE_PX_PER_MM * calScaleX.value
-  const h = layoutConfig.pageHeight * BASE_PX_PER_MM * calScaleY.value
+  const w = tlEffectiveWMm.value * BASE_PX_PER_MM * calScaleX.value
+  const h = tlEffectiveHMm.value * BASE_PX_PER_MM * calScaleY.value
   return {
     width: w + 'px',
     height: h + 'px'
@@ -769,8 +1021,8 @@ const previewDialogShowRuler = ref(false)
 
 const dialogRulerTicks = computed(() => {
   const pmm = BASE_PX_PER_MM
-  const wMm = previewLayoutConfig.pageWidth || 210
-  const hMm = previewLayoutConfig.pageHeight || 297
+  const wMm = previewLayoutConfig.smallPaperOnA4 ? A4_W_MM : (previewLayoutConfig.pageWidth || 210)
+  const hMm = previewLayoutConfig.smallPaperOnA4 ? A4_H_MM : (previewLayoutConfig.pageHeight || 297)
   const ticks = []
   for (let mm = 0; mm <= wMm; mm += 10) {
     ticks.push({ type: 'h', mm, x: mm * pmm, major: mm % 50 === 0 })
@@ -783,10 +1035,10 @@ const dialogRulerTicks = computed(() => {
 
 const dialogGuideLines = computed(() => {
   const pmm = BASE_PX_PER_MM
-  const w = previewLayoutConfig.pageWidth * pmm
-  const h = previewLayoutConfig.pageHeight * pmm
-  const wMm = previewLayoutConfig.pageWidth || 210
-  const hMm = previewLayoutConfig.pageHeight || 297
+  const wMm = previewLayoutConfig.smallPaperOnA4 ? A4_W_MM : (previewLayoutConfig.pageWidth || 210)
+  const hMm = previewLayoutConfig.smallPaperOnA4 ? A4_H_MM : (previewLayoutConfig.pageHeight || 297)
+  const w = wMm * pmm
+  const h = hMm * pmm
   const lines = []
   for (let cm = 1; cm < wMm / 10; cm++) {
     const x = cm * 10 * pmm
@@ -800,22 +1052,87 @@ const dialogGuideLines = computed(() => {
 })
 
 const previewPageStyleForDialog = computed(() => {
-  const w = previewLayoutConfig.pageWidth * BASE_PX_PER_MM
-  const h = previewLayoutConfig.pageHeight * BASE_PX_PER_MM
+  const wMm = previewLayoutConfig.smallPaperOnA4 ? A4_W_MM : (previewLayoutConfig.pageWidth || 210)
+  const hMm = previewLayoutConfig.smallPaperOnA4 ? A4_H_MM : (previewLayoutConfig.pageHeight || 297)
+  const w = wMm * BASE_PX_PER_MM
+  const h = hMm * BASE_PX_PER_MM
+  const fx = previewLayoutConfig.flipH ? -1 : 1
+  const fy = previewLayoutConfig.flipV ? -1 : 1
+  const tx = previewLayoutConfig.flipH ? w : 0
+  const ty = previewLayoutConfig.flipV ? h : 0
   return {
     width: w + 'px',
     height: h + 'px',
-    transform: `scale(${calScaleX.value}, ${calScaleY.value})`,
+    transform: `translate(${tx}px, ${ty}px) scale(${calScaleX.value * fx}, ${calScaleY.value * fy})`,
     transformOrigin: 'top left'
   }
 })
 
 const previewWrapperStyleForDialog = computed(() => {
-  const w = previewLayoutConfig.pageWidth * BASE_PX_PER_MM * calScaleX.value
-  const h = previewLayoutConfig.pageHeight * BASE_PX_PER_MM * calScaleY.value
+  const wMm = previewLayoutConfig.smallPaperOnA4 ? A4_W_MM : (previewLayoutConfig.pageWidth || 210)
+  const hMm = previewLayoutConfig.smallPaperOnA4 ? A4_H_MM : (previewLayoutConfig.pageHeight || 297)
+  const w = wMm * BASE_PX_PER_MM * calScaleX.value
+  const h = hMm * BASE_PX_PER_MM * calScaleY.value
   return {
     width: w + 'px',
     height: h + 'px'
+  }
+})
+
+const previewScalerStyleForDialog = computed(() => {
+  const lwMm = previewLayoutConfig.pageWidth || 210
+  const lhMm = previewLayoutConfig.pageHeight || 297
+  if (!previewLayoutConfig.smallPaperOnA4) {
+    return { width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }
+  }
+  // 小纸A4模式：不缩放，偏移到小纸位置（水平+垂直对齐）
+  const align = previewLayoutConfig.smallPaperAlign || 'center'
+  let offsetXmm
+  if (align === 'left') {
+    offsetXmm = 0
+  } else if (align === 'right') {
+    offsetXmm = A4_W_MM - lwMm
+  } else {
+    offsetXmm = (A4_W_MM - lwMm) / 2
+  }
+  const vAlign = previewLayoutConfig.smallPaperVAlign || 'top'
+  const offsetYmm = vAlign === 'bottom' ? (A4_H_MM - lhMm) : 0
+  return {
+    width: (lwMm * BASE_PX_PER_MM) + 'px',
+    height: (lhMm * BASE_PX_PER_MM) + 'px',
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    transform: `translate(${offsetXmm * BASE_PX_PER_MM}px, ${offsetYmm * BASE_PX_PER_MM}px)`,
+    transformOrigin: 'top left'
+  }
+})
+
+// 全屏预览：小纸位置指示框
+const dialogSmallPaperIndicatorStyle = computed(() => {
+  if (!previewLayoutConfig.smallPaperOnA4) return { display: 'none' }
+  const lwMm = previewLayoutConfig.pageWidth || 210
+  const lhMm = previewLayoutConfig.pageHeight || 297
+  const align = previewLayoutConfig.smallPaperAlign || 'center'
+  let offsetXmm
+  if (align === 'left') {
+    offsetXmm = 0
+  } else if (align === 'right') {
+    offsetXmm = A4_W_MM - lwMm
+  } else {
+    offsetXmm = (A4_W_MM - lwMm) / 2
+  }
+  const vAlign = previewLayoutConfig.smallPaperVAlign || 'top'
+  const offsetYmm = vAlign === 'bottom' ? (A4_H_MM - lhMm) : 0
+  return {
+    position: 'absolute',
+    top: (offsetYmm * BASE_PX_PER_MM) + 'px',
+    left: (offsetXmm * BASE_PX_PER_MM) + 'px',
+    width: (lwMm * BASE_PX_PER_MM) + 'px',
+    height: (lhMm * BASE_PX_PER_MM) + 'px',
+    border: '2px dashed #67c23a',
+    pointerEvents: 'none',
+    zIndex: 5
   }
 })
 
@@ -874,7 +1191,7 @@ const handleTypeChange = (val) => {
     displayItems.value = ['seat', 'fahui_name']
   } else if (val === '往生牌位') {
     contentTemplate.namesTitle = '佛光接引'
-    displayItems.value = ['seat', 'fahui_name']
+    displayItems.value = ['seat', 'fahui_name', 'yangshang']
   } else if (val === '佛事牌子') {
     contentTemplate.namesTitle = '佛力超度'
     displayItems.value = ['shizhu_name']
@@ -901,6 +1218,10 @@ const loadConfig = (row) => {
     } catch (e) {
       console.error('解析布局配置失败:', e)
     }
+  }
+  // 往生牌位默认启用阳上显示（兼容旧模板）
+  if (row.模板类型 === '往生牌位' && !displayItems.value.includes('yangshang')) {
+    displayItems.value = [...displayItems.value, 'yangshang']
   }
 }
 
@@ -1072,12 +1393,18 @@ const handlePreviewFromList = (row) => {
 
 const openPdfFromConfig = async (config, names, yangshangNames, seat, fahuiName, shizhuName) => {
   try {
+    const isWs = config._template_type === '往生牌位'
     const records = [{
       xm1: names[0] || '',
       xm2: names[1] || '',
       xm3: names[2] || '',
-      xm4: yangshangNames[0] || '',
-      xm5: yangshangNames[1] || '',
+      xm4: names[3] || '',
+      xm5: isWs ? (yangshangNames[0] || '') : (names[4] || ''),
+      xm6: yangshangNames[1] || '',
+      xm7: yangshangNames[2] || '',
+      xm8: yangshangNames[3] || '',
+      xm9: yangshangNames[4] || '',
+      xm10: yangshangNames[5] || '',
       fahui_name: fahuiName,
       zuoweinum: seat,
       shizhu_name: shizhuName
@@ -1184,8 +1511,8 @@ onMounted(() => { fetchData() })
 .zoom-label { font-size: 12px; color: #606266; white-space: nowrap; }
 .zoom-value { font-size: 12px; color: #409eff; min-width: 36px; text-align: center; }
 .preview-info { color: #606266; font-size: 13px; }
-.preview-container { flex: 1; display: flex; justify-content: center; align-items: flex-start; background: #e8e8e8; border-radius: 4px; padding: 15px; overflow: auto; }
-.preview-page-wrapper { flex-shrink: 0; pointer-events: none; }
+.preview-container { flex: 1; background: #e8e8e8; border-radius: 4px; padding: 15px; overflow: auto; }
+.preview-page-wrapper { margin: 0 auto; pointer-events: none; }
 .preview-page { background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.15); box-sizing: border-box; position: relative; overflow: hidden; pointer-events: auto; }
 .ruler-overlay { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 10; }
 .preview-bg-image { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
@@ -1193,4 +1520,9 @@ onMounted(() => { fetchData() })
 .preview-yangshang-area { display: flex; flex-direction: row-reverse; align-items: flex-start; }
 .preview-names-area { display: flex; flex-direction: row-reverse; justify-content: center; align-items: flex-start; }
 .preview-bottom { position: absolute; z-index: 1; }
+.editable-cell { outline: none; border-radius: 2px; transition: background 0.15s; min-width: 1em; min-height: 1em; }
+.editable-cell:hover { background: rgba(64, 158, 255, 0.12); box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.3); }
+.editable-cell:focus { background: rgba(64, 158, 255, 0.18); box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.6); }
+.add-name-btn { white-space: nowrap; user-select: none; }
+.add-name-btn:hover { color: #409eff !important; border-color: #409eff !important; }
 </style>

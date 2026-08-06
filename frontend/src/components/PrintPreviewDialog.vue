@@ -36,19 +36,21 @@
     <div class="preview-container">
       <div class="preview-page-wrapper" :style="previewWrapperStyle">
         <div class="preview-page" :style="previewPageStyle">
-          <img v-if="resolvedLayout.backgroundImage" :src="resolvedLayout.backgroundImage" class="preview-bg-image" :style="{ opacity: (resolvedLayout.backgroundOpacity || 30) / 100 }" />
-          <div class="preview-content" :style="previewContentStyle">
-            <div v-if="isWangSheng && resolvedDisplayItems.includes('yangshang')" class="preview-yangshang-area" :style="yangshangAreaStyle">
-              <div :style="{ writingMode: 'vertical-rl', fontSize: (resolvedLayout.yangshangFontSize || 18) + 'px', lineHeight: '1.2' }">阳上</div>
-              <div v-for="(name, idx) in yangshangNames" :key="'ys-'+idx" :style="{ writingMode: 'vertical-rl', fontSize: (resolvedLayout.yangshangFontSize || 18) + 'px', lineHeight: '1.2', letterSpacing: '0.05em' }">{{ name }}</div>
+          <div class="small-paper-indicator" :style="smallPaperIndicatorStyle"></div>
+          <div class="preview-scaler" :style="previewScalerStyle">
+            <img v-if="resolvedLayout.backgroundImage" :src="resolvedLayout.backgroundImage" class="preview-bg-image" :style="{ opacity: (resolvedLayout.backgroundOpacity || 30) / 100 }" />
+            <div class="preview-content" :style="previewContentStyle">
+              <div v-if="isWangSheng && resolvedDisplayItems.includes('yangshang')" class="preview-yangshang-area" :style="yangshangAreaStyle">
+              <div v-for="(name, idx) in alignedYangshangNames" :key="'ys-'+idx" :style="yangshangItemStyle">{{ name }}</div>
             </div>
-            <div class="preview-names-area" :style="namesAreaStyle">
-              <div v-for="(name, idx) in alignedMainNames" :key="'n-'+idx" :style="nameItemStyle">{{ name }}</div>
-            </div>
-            <div v-if="resolvedDisplayItems.includes('seat') || resolvedDisplayItems.includes('fahui_name') || resolvedDisplayItems.includes('shizhu_name')" class="preview-bottom" :style="bottomAreaStyle">
-              <span v-if="resolvedDisplayItems.includes('shizhu_name')">{{ record.施主姓名 }} </span>
-              <span v-if="resolvedDisplayItems.includes('fahui_name')">{{ record.fahui_name }} </span>
-              <span v-if="resolvedDisplayItems.includes('seat')">{{ record.zuoweinum || record.座次 || '' }}</span>
+              <div class="preview-names-area" :style="namesAreaStyle">
+                <div v-for="(name, idx) in alignedMainNames" :key="'n-'+idx" :style="nameItemStyle">{{ name }}</div>
+              </div>
+              <div v-if="resolvedDisplayItems.includes('seat') || resolvedDisplayItems.includes('fahui_name') || resolvedDisplayItems.includes('shizhu_name')" class="preview-bottom" :style="bottomAreaStyle">
+                <span v-if="resolvedDisplayItems.includes('shizhu_name')">{{ record.施主姓名 }} </span>
+                <span v-if="resolvedDisplayItems.includes('fahui_name')">{{ record.fahui_name }} </span>
+                <span v-if="resolvedDisplayItems.includes('seat')">{{ record.zuoweinum || record.座次 || '' }}</span>
+              </div>
             </div>
           </div>
           <svg v-if="showRuler" class="ruler-overlay" :width="previewPageStyle.width" :height="previewPageStyle.height" xmlns="http://www.w3.org/2000/svg">
@@ -96,6 +98,13 @@ const handleClose = () => {
 
 const templateList = ref([])
 const selectedTemplateId = ref(null)
+const A4_W_MM = 210
+const A4_H_MM = 297
+
+// 小纸A4对齐模式：打印机驱动设A4走纸，实际送小纸，内容不缩放偏移到小纸位置
+const smallPaperOnA4 = computed(() => resolvedLayout.value.smallPaperOnA4 === true)
+// 预览画布是否用A4尺寸（小纸A4模式用A4画布）
+const useA4Canvas = computed(() => smallPaperOnA4.value)
 
 const isWangSheng = computed(() => props.record.yanwang === 1)
 
@@ -122,11 +131,17 @@ watch(() => props.visible, (val) => {
 
 const defaultLayout = {
   pageWidth: 210, pageHeight: 297,
+  printerMargin: 5,
   fontFamily: 'STXingkai',
   nameFontSize: 52, nameSpacing: 20,
+  autoPadNames: true,
   namesTopPct: 25, namesLeftPct: 10,
   namesWidthPct: 80, namesHeightPct: 55,
   yangshangFontSize: 18, yangshangSpacing: 5,
+  yangshangCharSpacing: 1.3,
+  autoPadYangshang: true,
+  yangshangTopPct: 25, yangshangLeftPct: 2,
+  yangshangWidthPct: 20, yangshangHeightPct: 55,
   seatFontSize: 24
 }
 
@@ -156,12 +171,19 @@ const templateConfig = computed(() => {
 })
 
 const resolvedLayout = computed(() => ({ ...defaultLayout, ...templateConfig.value.layout }))
-const resolvedDisplayItems = computed(() => templateConfig.value.displayItems || ['seat', 'fahui_name'])
+const resolvedDisplayItems = computed(() => {
+  const items = templateConfig.value.displayItems || ['seat', 'fahui_name']
+  // 往生牌位默认启用阳上显示（兼容旧模板）
+  if (isWangSheng.value && !items.includes('yangshang')) {
+    return [...items, 'yangshang']
+  }
+  return items
+})
 
 const mainNames = computed(() => {
   const row = props.record
   if (isWangSheng.value) {
-    return [row.xm1, row.xm2, row.xm3].filter(Boolean)
+    return [row.xm1, row.xm2, row.xm3, row.xm4].filter(Boolean)
   }
   return [row.xm1, row.xm2, row.xm3, row.xm4, row.xm5].filter(Boolean)
 })
@@ -169,7 +191,7 @@ const mainNames = computed(() => {
 const yangshangNames = computed(() => {
   if (!isWangSheng.value) return []
   const row = props.record
-  return [row.xm4, row.xm5].filter(Boolean)
+  return [row.xm5, row.xm6, row.xm7, row.xm8, row.xm9, row.xm10].filter(Boolean)
 })
 
 const splitNameSuffix = (name) => {
@@ -212,8 +234,29 @@ const padNamePart = (namePart, maxLen) => {
 }
 
 const alignedMainNames = computed(() => {
+  if (resolvedLayout.value.autoPadNames === false) {
+    return mainNames.value
+  }
   return parsedMainNames.value.map(parsed => {
     const padded = padNamePart(parsed.namePart, maxNamePartLen.value)
+    return padded + (parsed.suffix ? parsed.suffix : '')
+  })
+})
+
+const parsedYangshangNames = computed(() => {
+  return yangshangNames.value.map(n => splitNameSuffix(n))
+})
+
+const maxYangshangNamePartLen = computed(() => {
+  return Math.max(...parsedYangshangNames.value.map(n => n.namePart.length), 0)
+})
+
+const alignedYangshangNames = computed(() => {
+  if (resolvedLayout.value.autoPadYangshang === false) {
+    return yangshangNames.value
+  }
+  return parsedYangshangNames.value.map(parsed => {
+    const padded = padNamePart(parsed.namePart, maxYangshangNamePartLen.value)
     return padded + (parsed.suffix ? parsed.suffix : '')
   })
 })
@@ -246,6 +289,7 @@ const yangshangAreaStyle = computed(() => {
     position: 'absolute',
     top: (l.yangshangTopPct ?? 25) + offsetPct + '%',
     left: (l.yangshangLeftPct ?? 2) + '%',
+    width: (l.yangshangWidthPct ?? 20) + '%',
     height: (l.yangshangHeightPct ?? 55) + '%',
     display: 'flex',
     flexDirection: 'row-reverse',
@@ -269,6 +313,17 @@ const nameItemStyle = computed(() => {
     lineHeight: '1.2',
     letterSpacing: ((l.nameCharSpacing || 1.3) - 1.0) + 'em',
     margin: '0 ' + ((l.nameSpacing || 20) / 2) + 'px'
+  }
+})
+
+const yangshangItemStyle = computed(() => {
+  const l = resolvedLayout.value
+  return {
+    writingMode: 'vertical-rl',
+    fontSize: (l.yangshangFontSize || 18) + 'px',
+    lineHeight: '1.2',
+    letterSpacing: ((l.yangshangCharSpacing || 1.3) - 1.0) + 'em',
+    margin: '0 ' + ((l.yangshangSpacing || 5) / 2) + 'px'
   }
 })
 
@@ -334,11 +389,14 @@ const calBarStyleY = computed(() => ({
   margin: '0 8px'
 }))
 
+// 实际纸张尺寸（A4画布模式用A4，否则用模板尺寸）——标尺和预览页尺寸以此为准
+const effectivePageWMm = computed(() => useA4Canvas.value ? A4_W_MM : (resolvedLayout.value.pageWidth || 210))
+const effectivePageHMm = computed(() => useA4Canvas.value ? A4_H_MM : (resolvedLayout.value.pageHeight || 297))
+
 const rulerTicks = computed(() => {
-  const layout = resolvedLayout.value
   const pmm = BASE_PX_PER_MM
-  const wMm = layout.pageWidth || 210
-  const hMm = layout.pageHeight || 297
+  const wMm = effectivePageWMm.value
+  const hMm = effectivePageHMm.value
   const ticks = []
   for (let mm = 0; mm <= wMm; mm += 10) {
     ticks.push({ type: 'h', mm, x: mm * pmm, major: mm % 50 === 0 })
@@ -350,12 +408,11 @@ const rulerTicks = computed(() => {
 })
 
 const guideLines = computed(() => {
-  const layout = resolvedLayout.value
   const pmm = BASE_PX_PER_MM
-  const w = (layout.pageWidth || 210) * pmm
-  const h = (layout.pageHeight || 297) * pmm
-  const wMm = layout.pageWidth || 210
-  const hMm = layout.pageHeight || 297
+  const wMm = effectivePageWMm.value
+  const hMm = effectivePageHMm.value
+  const w = wMm * pmm
+  const h = hMm * pmm
   const lines = []
   for (let cm = 1; cm < wMm / 10; cm++) {
     const x = cm * 10 * pmm
@@ -368,25 +425,95 @@ const guideLines = computed(() => {
   return lines
 })
 
+// 翻转选项（抵消打印机送纸方向差异）
+const flipH = computed(() => resolvedLayout.value.flipH === true)
+const flipV = computed(() => resolvedLayout.value.flipV === true)
+
 const previewPageStyle = computed(() => {
-  const layout = resolvedLayout.value
-  const w = (layout.pageWidth || 210) * BASE_PX_PER_MM
-  const h = (layout.pageHeight || 297) * BASE_PX_PER_MM
+  const w = effectivePageWMm.value * BASE_PX_PER_MM
+  const h = effectivePageHMm.value * BASE_PX_PER_MM
+  const fx = flipH.value ? -1 : 1
+  const fy = flipV.value ? -1 : 1
+  // 翻转时需要平移补偿：scale(-1) 以 top left 为原点会向负方向延伸，需 translate(w) 移回
+  const tx = flipH.value ? w : 0
+  const ty = flipV.value ? h : 0
   return {
     width: w + 'px',
     height: h + 'px',
-    transform: `scale(${calScaleX.value}, ${calScaleY.value})`,
+    transform: `translate(${tx}px, ${ty}px) scale(${calScaleX.value * fx}, ${calScaleY.value * fy})`,
     transformOrigin: 'top left'
   }
 })
 
 const previewWrapperStyle = computed(() => {
-  const layout = resolvedLayout.value
-  const w = (layout.pageWidth || 210) * BASE_PX_PER_MM * calScaleX.value
-  const h = (layout.pageHeight || 297) * BASE_PX_PER_MM * calScaleY.value
+  const w = effectivePageWMm.value * BASE_PX_PER_MM * calScaleX.value
+  const h = effectivePageHMm.value * BASE_PX_PER_MM * calScaleY.value
   return {
     width: w + 'px',
     height: h + 'px'
+  }
+})
+
+// 内容缩放层：与后端逻辑一致
+// - 默认模式：内容撑满预览页（模板原尺寸）
+// - 小纸A4模式：内容不缩放，偏移到小纸在A4走纸槽中的位置（水平+垂直对齐）
+const previewScalerStyle = computed(() => {
+  const layout = resolvedLayout.value
+  const lwMm = layout.pageWidth || 210
+  const lhMm = layout.pageHeight || 297
+  if (!useA4Canvas.value) {
+    return { width: '100%', height: '100%', position: 'absolute', top: 0, left: 0 }
+  }
+  // 小纸A4模式：不缩放，偏移到小纸位置
+  const align = layout.smallPaperAlign || 'center'
+  let offsetXmm
+  if (align === 'left') {
+    offsetXmm = 0
+  } else if (align === 'right') {
+    offsetXmm = A4_W_MM - lwMm
+  } else {
+    offsetXmm = (A4_W_MM - lwMm) / 2
+  }
+  // CSS y 向下：top=小纸顶部贴A4顶部 → offsetYmm=0；bottom=小纸底部贴A4底部 → offsetYmm=A4高度-小纸高度
+  const vAlign = layout.smallPaperVAlign || 'top'
+  const offsetYmm = vAlign === 'bottom' ? (A4_H_MM - lhMm) : 0
+  return {
+    width: (lwMm * BASE_PX_PER_MM) + 'px',
+    height: (lhMm * BASE_PX_PER_MM) + 'px',
+    position: 'absolute',
+    top: '0',
+    left: '0',
+    transform: `translate(${offsetXmm * BASE_PX_PER_MM}px, ${offsetYmm * BASE_PX_PER_MM}px)`,
+    transformOrigin: 'top left'
+  }
+})
+
+// 小纸位置指示框（小纸A4模式下显示小纸在A4走纸槽中的位置）
+const smallPaperIndicatorStyle = computed(() => {
+  if (!smallPaperOnA4.value) return { display: 'none' }
+  const layout = resolvedLayout.value
+  const lwMm = layout.pageWidth || 210
+  const lhMm = layout.pageHeight || 297
+  const align = layout.smallPaperAlign || 'center'
+  let offsetXmm
+  if (align === 'left') {
+    offsetXmm = 0
+  } else if (align === 'right') {
+    offsetXmm = A4_W_MM - lwMm
+  } else {
+    offsetXmm = (A4_W_MM - lwMm) / 2
+  }
+  const vAlign = layout.smallPaperVAlign || 'top'
+  const offsetYmm = vAlign === 'bottom' ? (A4_H_MM - lhMm) : 0
+  return {
+    position: 'absolute',
+    top: (offsetYmm * BASE_PX_PER_MM) + 'px',
+    left: (offsetXmm * BASE_PX_PER_MM) + 'px',
+    width: (lwMm * BASE_PX_PER_MM) + 'px',
+    height: (lhMm * BASE_PX_PER_MM) + 'px',
+    border: '2px dashed #67c23a',
+    pointerEvents: 'none',
+    zIndex: 5
   }
 })
 
@@ -403,6 +530,11 @@ const doPrint = async () => {
       xm3: props.record.xm3,
       xm4: props.record.xm4,
       xm5: props.record.xm5,
+      xm6: props.record.xm6,
+      xm7: props.record.xm7,
+      xm8: props.record.xm8,
+      xm9: props.record.xm9,
+      xm10: props.record.xm10,
       fahui_name: props.record.fahui_name,
       zuoweinum: props.record.座次 || props.record.zuoweinum,
       paiwei_type: props.record.paiwei_type,
@@ -436,8 +568,8 @@ const doPrint = async () => {
 .calibrate-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
 .calibrate-row:last-child { margin-bottom: 0; }
 .cal-label { font-weight: bold; font-size: 13px; min-width: 80px; }
-.preview-container { display: flex; justify-content: center; background: #e8e8e8; border-radius: 4px; padding: 20px; overflow: auto; max-height: 70vh; }
-.preview-page-wrapper { flex-shrink: 0; pointer-events: none; }
+.preview-container { background: #e8e8e8; border-radius: 4px; padding: 20px; overflow: auto; max-height: 70vh; }
+.preview-page-wrapper { margin: 0 auto; pointer-events: none; }
 .preview-page { background: #fff; box-shadow: 0 2px 12px rgba(0,0,0,0.15); box-sizing: border-box; position: relative; overflow: hidden; pointer-events: auto; }
 .ruler-overlay { position: absolute; top: 0; left: 0; pointer-events: none; z-index: 10; }
 .preview-bg-image { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }

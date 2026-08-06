@@ -7,6 +7,7 @@ import traceback
 import webbrowser
 import json
 import asyncio
+import shutil
 from pathlib import Path
 import ctypes
 import tempfile
@@ -105,6 +106,37 @@ os.environ["TEMPLE_DB_PATH"] = str(DB_PATH)
 os.environ["TEMPLE_BACKUP_DIR"] = str(DATA_PATH / "backups")
 
 sys.path.insert(0, str(BASE_PATH / "backend"))
+
+# 注册同步状态模块，供 backend/app/middleware/log_middleware.py 标记数据库写入
+# 必须在 import FastAPI 模块之前注册，LogMiddleware 加载时才能 import 到
+import types as _types
+_sync_state = _types.ModuleType('temple_sync_state')
+_sync_state.dirty_time = None        # 最后一次写操作时间戳
+_sync_state.last_sync_time = 0.0    # 最后一次同步完成时间戳
+_sync_state.lock = threading.Lock()
+sys.modules['temple_sync_state'] = _sync_state
+log_message("已注册 temple_sync_state 共享状态模块")
+
+def _mark_dirty():
+    """标记数据库有写入，待 watcher 线程 debounce 后同步"""
+    with _sync_state.lock:
+        _sync_state.dirty_time = time.time()
+
+def _should_sync(debounce_sec=5):
+    """判断是否需要同步：有写入标记且距最后一次写入超过 debounce_sec 秒"""
+    with _sync_state.lock:
+        if _sync_state.dirty_time is None:
+            return False
+        if time.time() - _sync_state.dirty_time < debounce_sec:
+            return False
+        if _sync_state.last_sync_time >= _sync_state.dirty_time:
+            return False
+        return True
+
+def _mark_synced():
+    with _sync_state.lock:
+        _sync_state.last_sync_time = time.time()
+        _sync_state.dirty_time = None
 
 try:
     log_message("开始导入 FastAPI 模块...")
@@ -532,6 +564,7 @@ def create_tray_icon(url, show_window_callback, root):
 
     def on_exit(icon, item):
         log_message("用户从托盘退出")
+        final_sync()
         icon.stop()
         os._exit(0)
 
@@ -585,6 +618,7 @@ def show_control_window(url):
 
     def exit_app():
         log_message("用户点击退出")
+        final_sync()
         if tray_icon:
             tray_icon.stop()
         os._exit(0)
@@ -612,6 +646,262 @@ def show_control_window(url):
     root.protocol("WM_DELETE_WINDOW", on_close)
     root.mainloop()
 
+def _get_system_backup_root():
+    """返回系统目录镜像备份根路径 (%LOCALAPPDATA%\\TempleManagement\\backup)。"""
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if not local_app_data:
+        return None
+    return Path(local_app_data) / "TempleManagement" / "backup"
+
+def _restore_from_system_dir():
+    """启动时若本地 database 或 uploads 缺失（升级覆盖/误删），从系统目录镜像恢复。
+
+    - 仅当本地缺失时才恢复，不会覆盖已存在的本地文件
+    - 数据库恢复后会继续走 init_db 流程（如果系统目录也没有备份，则首次启动初始化）
+    - 在服务器线程启动之前调用，避免数据库并发访问
+    返回 True 表示执行过恢复操作，False 表示未恢复。
+    """
+    try:
+        backup_root = _get_system_backup_root()
+        if not backup_root:
+            log_message("未找到 LOCALAPPDATA 环境变量，跳过系统目录恢复检查")
+            return False
+
+        backup_db_path = backup_root / "database" / "temple.db"
+        backup_uploads_dir = backup_root / "uploads"
+
+        restored_something = False
+
+        # 1. 数据库恢复：本地缺失但系统目录有备份
+        if not DB_PATH.exists():
+            if backup_db_path.exists():
+                DB_DIR.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(backup_db_path, DB_PATH)
+                log_message(f"⚠ 本地数据库缺失，已从系统目录恢复: {backup_db_path} → {DB_PATH}")
+                restored_something = True
+            else:
+                log_message("本地数据库缺失，但系统目录无备份，将走首次启动初始化流程")
+        else:
+            log_message("本地数据库存在，跳过恢复检查")
+
+        # 2. uploads 恢复：本地目录缺失或为空，但系统目录有备份
+        local_uploads_empty = (not UPLOAD_DIR.exists()) or not any(UPLOAD_DIR.rglob("*"))
+        backup_uploads_has_files = backup_uploads_dir.exists() and any(backup_uploads_dir.rglob("*"))
+
+        if local_uploads_empty and backup_uploads_has_files:
+            UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+            restored = 0
+            for src_file in backup_uploads_dir.rglob("*"):
+                if not src_file.is_file():
+                    continue
+                rel = src_file.relative_to(backup_uploads_dir)
+                dst_file = UPLOAD_DIR / rel
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src_file, dst_file)
+                restored += 1
+            log_message(f"⚠ 本地 uploads 缺失，已从系统目录恢复 {restored} 个文件")
+            restored_something = True
+        elif local_uploads_empty:
+            log_message("本地 uploads 缺失，但系统目录无备份，跳过恢复")
+        else:
+            log_message("本地 uploads 存在，跳过恢复检查")
+
+        return restored_something
+    except Exception as e:
+        log_message(f"从系统目录恢复失败: {e}")
+        traceback.print_exc()
+        return False
+
+def _backup_database_to(backup_db_path):
+    """使用 sqlite3.backup() 在线热备份数据库，确保数据一致性。
+
+    相比 shutil.copy2，sqlite3.backup() 能在数据库被 uvicorn 占用时安全复制，
+    不会拿到中间状态的不一致快照。
+    """
+    import sqlite3
+    backup_db_path.parent.mkdir(parents=True, exist_ok=True)
+    source = sqlite3.connect(str(DB_PATH))
+    try:
+        dest = sqlite3.connect(str(backup_db_path))
+        try:
+            source.backup(dest)
+        finally:
+            dest.close()
+    finally:
+        source.close()
+
+def _mirror_to_system_dir():
+    """把本地 database 和 uploads 镜像备份到系统目录。
+
+    - 数据库使用 sqlite3.backup() 在线热备份，运行时也安全
+    - uploads 目录递归镜像，仅复制新增或修改过的文件
+    """
+    try:
+        backup_root = _get_system_backup_root()
+        if not backup_root:
+            log_message("未找到 LOCALAPPDATA 环境变量，跳过系统目录镜像备份")
+            return
+
+        backup_db_dir = backup_root / "database"
+        backup_uploads_dir = backup_root / "uploads"
+
+        backup_root.mkdir(parents=True, exist_ok=True)
+        backup_db_dir.mkdir(parents=True, exist_ok=True)
+
+        # 1. 镜像数据库文件
+        if DB_PATH.exists():
+            backup_db_path = backup_db_dir / "temple.db"
+            need_copy = True
+            if backup_db_path.exists():
+                if DB_PATH.stat().st_mtime <= backup_db_path.stat().st_mtime:
+                    need_copy = False
+            if need_copy:
+                _backup_database_to(backup_db_path)
+                log_message(f"数据库已镜像到系统目录: {backup_db_path}")
+            else:
+                log_message("数据库未变化，跳过系统目录镜像")
+        else:
+            log_message("数据库文件不存在，跳过镜像")
+
+        # 2. 镜像 uploads 目录
+        if UPLOAD_DIR.exists():
+            backup_uploads_dir.mkdir(parents=True, exist_ok=True)
+            copied = 0
+            skipped = 0
+            for src_file in UPLOAD_DIR.rglob("*"):
+                if not src_file.is_file():
+                    continue
+                rel = src_file.relative_to(UPLOAD_DIR)
+                dst_file = backup_uploads_dir / rel
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+
+                need_copy = True
+                if dst_file.exists():
+                    if src_file.stat().st_mtime <= dst_file.stat().st_mtime:
+                        need_copy = False
+                if need_copy:
+                    shutil.copy2(src_file, dst_file)
+                    copied += 1
+                else:
+                    skipped += 1
+            log_message(f"uploads 镜像完成: 复制 {copied} 个文件, 跳过 {skipped} 个未变化文件")
+        else:
+            log_message("uploads 目录不存在，跳过镜像")
+
+        log_message(f"系统目录镜像备份完成: {backup_root}")
+    except Exception as e:
+        log_message(f"系统目录镜像备份失败: {e}")
+        traceback.print_exc()
+
+def do_incremental_sync():
+    """事件驱动的增量同步：数据库用 sqlite3.backup()，uploads 用 mtime 增量。
+
+    与 _mirror_to_system_dir 的区别：
+    - 数据库不做 mtime 检测，每次都执行 sqlite3.backup()（开销低，SQLite 官方推荐方式）
+    - uploads 仍按 mtime 增量
+    - 适用于运行中被 watcher 线程调用的场景
+
+    返回 (db_synced: bool, uploads_copied: int)
+    """
+    backup_root = _get_system_backup_root()
+    if not backup_root:
+        return False, 0
+
+    backup_db_dir = backup_root / "database"
+    backup_db_path = backup_db_dir / "temple.db"
+    backup_uploads_dir = backup_root / "uploads"
+
+    backup_db_dir.mkdir(parents=True, exist_ok=True)
+
+    db_synced = False
+    uploads_copied = 0
+
+    # 1. 数据库热备份
+    try:
+        if DB_PATH.exists():
+            _backup_database_to(backup_db_path)
+            db_synced = True
+            log_message(f"数据库已增量同步到: {backup_db_path}")
+    except Exception as e:
+        log_message(f"数据库增量同步失败: {e}")
+
+    # 2. uploads 增量
+    try:
+        if UPLOAD_DIR.exists():
+            backup_uploads_dir.mkdir(parents=True, exist_ok=True)
+            for src_file in UPLOAD_DIR.rglob("*"):
+                if not src_file.is_file():
+                    continue
+                rel = src_file.relative_to(UPLOAD_DIR)
+                dst_file = backup_uploads_dir / rel
+                dst_file.parent.mkdir(parents=True, exist_ok=True)
+
+                need_copy = True
+                if dst_file.exists():
+                    if src_file.stat().st_mtime <= dst_file.stat().st_mtime:
+                        need_copy = False
+                if need_copy:
+                    shutil.copy2(src_file, dst_file)
+                    uploads_copied += 1
+    except Exception as e:
+        log_message(f"uploads 增量同步失败: {e}")
+
+    return db_synced, uploads_copied
+
+def sync_watcher():
+    """后台 watcher 线程：检测写操作并 debounce 60 秒后执行增量同步。
+
+    - 每 30 秒检查一次 temple_sync_state.dirty_time
+    - 距最后一次写入超过 60 秒才同步（debounce，避免连续写入时频繁同步）
+    - 同步完成后清空 dirty_time 标记
+    """
+    log_message("数据同步 watcher 线程已启动 (debounce=60s, check_interval=30s)")
+    while True:
+        try:
+            time.sleep(30)
+            if _should_sync(debounce_sec=60):
+                log_message("检测到数据变化，开始增量同步...")
+                db_synced, uploads_copied = do_incremental_sync()
+                _mark_synced()
+                if db_synced or uploads_copied > 0:
+                    log_message(f"增量同步完成: 数据库={db_synced}, uploads 新增 {uploads_copied} 个文件")
+                else:
+                    log_message("增量同步完成: 无变化")
+        except Exception as e:
+            log_message(f"sync_watcher 错误: {e}")
+
+def final_sync():
+    """程序退出前强制同步一次，确保最新数据已备份。
+
+    即使 dirty_time 为 None 也执行（兜底）：可能有写入还没被中间件捕获到。
+    """
+    try:
+        log_message("退出前执行最终同步...")
+        db_synced, uploads_copied = do_incremental_sync()
+        _mark_synced()
+        log_message(f"最终同步完成: 数据库={db_synced}, uploads 新增 {uploads_copied} 个文件")
+    except Exception as e:
+        log_message(f"最终同步失败: {e}")
+        traceback.print_exc()
+
+def sync_with_system_dir():
+    """启动时同步本地与系统目录：先恢复（本地缺失时），再镜像（保存当前状态）。
+
+    完整流程：
+    1. 若本地 database/uploads 缺失（升级覆盖/误删），从系统目录恢复
+    2. 然后把当前本地状态镜像到系统目录（保证下次启动的备份是最新的）
+    """
+    log_message("开始系统目录同步...")
+    restored = _restore_from_system_dir()
+    if restored:
+        log_message("已从系统目录恢复数据，跳过本次镜像（避免用刚恢复的内容覆盖备份的元信息）")
+        # 恢复后不再立刻镜像回去：因为刚恢复的内容 mtime 可能比系统目录的旧，
+        # 镜像逻辑会判定为"未变化"而跳过，但写入可能会更新 atime 等，造成混淆。
+        # 下次正常启动时会自动镜像。
+        return
+    _mirror_to_system_dir()
+    log_message("系统目录同步完成")
+
 if __name__ == "__main__":
     try:
         MUTEX_NAME = "Global\\TempleManagement_SingleInstance"
@@ -636,6 +926,11 @@ if __name__ == "__main__":
 
         log_message("缘通寺院信息管理系统 启动中...")
 
+        # 在服务器启动前同步本地与系统目录：
+        # - 若本地 database/uploads 缺失（升级覆盖/误删），从系统目录恢复
+        # - 否则把本地最新状态镜像到系统目录
+        sync_with_system_dir()
+
         server_port = CONFIG['port']
         if not is_port_available(server_port):
             log_message(f"端口 {server_port} 已被占用，正在寻找可用端口...")
@@ -648,6 +943,10 @@ if __name__ == "__main__":
 
         server_thread = threading.Thread(target=run_server, daemon=True)
         server_thread.start()
+
+        # 启动数据同步 watcher 线程（事件驱动增量同步到系统目录）
+        sync_thread = threading.Thread(target=sync_watcher, daemon=True)
+        sync_thread.start()
 
         log_message("服务器线程已启动, 等待HTTP响应...")
 

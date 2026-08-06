@@ -28,6 +28,11 @@ class SilentPrintRecord(BaseModel):
     xm3: Optional[str] = None
     xm4: Optional[str] = None
     xm5: Optional[str] = None
+    xm6: Optional[str] = None
+    xm7: Optional[str] = None
+    xm8: Optional[str] = None
+    xm9: Optional[str] = None
+    xm10: Optional[str] = None
     fahui_name: Optional[str] = None
     zuoweinum: Optional[str] = None
     paiwei_type: Optional[str] = None
@@ -186,15 +191,57 @@ def pad_name_part(name_part, max_len):
     return result
 
 
-def generate_template_pdf(config: dict, records: list, output_path: str):
+def generate_template_pdf(config: dict, records: list, output_path: str, target_page_size: Optional[tuple] = None):
     from reportlab.pdfgen import canvas
     from reportlab.lib.units import mm
 
     layout = config.get('layout', {})
     display_items = config.get('displayItems', [])
 
+    # 往生牌位默认启用阳上显示（兼容旧模板）
+    template_type = config.get('_template_type', '延生牌位')
+    if template_type == '往生牌位' and 'yangshang' not in display_items:
+        display_items = list(display_items) + ['yangshang']
+
     page_width = layout.get('pageWidth', 210) * mm
     page_height = layout.get('pageHeight', 297) * mm
+
+    # 输出模式：
+    # 1. 默认：PDF=模板原尺寸，内容不缩放（适合打印机走纸尺寸=模板尺寸）
+    # 2. smallPaperOnA4=true：小纸A4对齐模式，PDF=A4，内容按模板原尺寸不缩放，偏移到小纸在A4走纸槽中的位置
+    #    （适合：打印机驱动设A4走纸，实际送小纸，小纸在A4槽中的位置由smallPaperAlign/smallPaperVAlign决定）
+    #    smallPaperAlign: left/center/right，小纸在A4走纸槽水平方向的对齐方式
+    #    smallPaperVAlign: top/bottom，小纸在A4走纸槽垂直方向的对齐方式（默认top）
+    small_paper_on_a4 = layout.get('smallPaperOnA4', False)
+
+    if small_paper_on_a4:
+        # 小纸A4对齐模式：PDF画布=A4，内容不缩放，偏移到小纸位置
+        pdf_w_pt = 210 * mm
+        pdf_h_pt = 297 * mm
+        canvas_size = (pdf_w_pt, pdf_h_pt)
+        fit_scale = 1.0
+        # 小纸在A4走纸槽中的水平偏移（reportlab原点左下，x向右）
+        align = layout.get('smallPaperAlign', 'center')
+        if align == 'left':
+            offset_x_pt = 0
+        elif align == 'right':
+            offset_x_pt = pdf_w_pt - page_width
+        else:  # center
+            offset_x_pt = (pdf_w_pt - page_width) / 2
+        # 垂直方向：reportlab原点左下，y向上
+        # top=小纸顶部贴A4顶部 → 小纸底部y = A4高度 - 小纸高度
+        # bottom=小纸底部贴A4底部 → 小纸底部y = 0
+        v_align = layout.get('smallPaperVAlign', 'top')
+        if v_align == 'bottom':
+            offset_y_pt = 0
+        else:  # top
+            offset_y_pt = pdf_h_pt - page_height
+    else:
+        # 默认模式：PDF=模板原尺寸
+        fit_scale = 1.0
+        offset_x_pt = 0
+        offset_y_pt = 0
+        canvas_size = (page_width, page_height)
 
     if layout.get('nameFontSize') is None and layout.get('nameFontSize1') is not None:
         layout['nameFontSize'] = layout.get('nameFontSize3', 44)
@@ -213,6 +260,8 @@ def generate_template_pdf(config: dict, records: list, output_path: str):
     name_spacing_px = layout.get('nameSpacing', 20)
     name_spacing = px_to_pt(name_spacing_px)
     name_char_spacing_ratio = layout.get('nameCharSpacing', 1.3)
+    auto_pad_names = layout.get('autoPadNames', True)
+    auto_pad_yangshang = layout.get('autoPadYangshang', True)
 
     names_top_pct = layout.get('namesTopPct', 25)
     names_left_pct = layout.get('namesLeftPct', 10)
@@ -223,8 +272,10 @@ def generate_template_pdf(config: dict, records: list, output_path: str):
     yangshang_font_size = px_to_pt(yangshang_font_size_px)
     yangshang_spacing_px = layout.get('yangshangSpacing', 5)
     yangshang_spacing = px_to_pt(yangshang_spacing_px)
+    yangshang_char_spacing_ratio = layout.get('yangshangCharSpacing', 1.3)
     yangshang_top_pct = layout.get('yangshangTopPct', 25)
     yangshang_left_pct = layout.get('yangshangLeftPct', 2)
+    yangshang_width_pct = layout.get('yangshangWidthPct', 20)
     yangshang_height_pct = layout.get('yangshangHeightPct', 55)
 
     seat_font_size_px = layout.get('seatFontSize', 24)
@@ -232,7 +283,6 @@ def generate_template_pdf(config: dict, records: list, output_path: str):
     bottom_top_pct = layout.get('bottomTopPct', 90)
     bottom_left_pct = layout.get('bottomLeftPct', 50)
 
-    template_type = config.get('_template_type', '延生牌位')
     is_wangsheng = template_type == '往生牌位'
 
     print_offset_mm = layout.get('printOffsetY', 0)
@@ -243,9 +293,31 @@ def generate_template_pdf(config: dict, records: list, output_path: str):
     background_opacity = layout.get('backgroundOpacity', 30) / 100.0
     print_ruler = layout.get('printRuler', False)
 
-    c = canvas.Canvas(output_path, pagesize=(page_width, page_height))
+    c = canvas.Canvas(output_path, pagesize=canvas_size)
+
+    # 翻转选项（抵消打印机送纸方向差异）：水平翻转、垂直翻转
+    # 作用于整个画布，小纸位置和内容一起翻转
+    flip_h = layout.get('flipH', False)
+    flip_v = layout.get('flipV', False)
+    canvas_w_pt = canvas_size[0]
+    canvas_h_pt = canvas_size[1]
 
     for record in records:
+        c.saveState()
+        # 整体翻转（如果启用）
+        # reportlab 原点在左下，y 向上
+        # 水平翻转：先移到右上角，再 x 轴反向
+        # 垂直翻转：先移到左下角，再 y 轴反向
+        if flip_h:
+            c.translate(canvas_w_pt, 0)
+            c.scale(-1, 1)
+        if flip_v:
+            c.translate(0, canvas_h_pt)
+            c.scale(1, -1)
+        # 小纸A4模式：偏移内容到A4上的小纸位置
+        if small_paper_on_a4:
+            c.translate(offset_x_pt, offset_y_pt)
+            c.scale(fit_scale, fit_scale)
         if print_background and background_image_url:
             image_path = resolve_image_path(background_image_url)
             if image_path and os.path.exists(image_path):
@@ -272,8 +344,8 @@ def generate_template_pdf(config: dict, records: list, output_path: str):
         names = []
         yangshang_names = []
         if is_wangsheng:
-            names = [record.xm1, record.xm2, record.xm3]
-            yangshang_names = [record.xm4, record.xm5]
+            names = [record.xm1, record.xm2, record.xm3, record.xm4]
+            yangshang_names = [record.xm5, record.xm6, record.xm7, record.xm8, record.xm9, record.xm10]
         else:
             names = [record.xm1, record.xm2, record.xm3, record.xm4, record.xm5]
 
@@ -297,16 +369,18 @@ def generate_template_pdf(config: dict, records: list, output_path: str):
             total_used_width = name_count * name_font_size + (name_count - 1) * actual_spacing
             start_x = area_left + (area_width - total_used_width) / 2 + name_font_size / 2
 
-            parsed_names = [split_name_suffix(n) for n in names]
-            max_name_len = max((len(np) for np, sf in parsed_names), default=0)
+            if auto_pad_names:
+                parsed_names = [split_name_suffix(n) for n in names]
+                max_name_len = max((len(np) for np, sf in parsed_names), default=0)
+                full_texts = [pad_name_part(np, max_name_len) + sf for np, sf in parsed_names]
+            else:
+                full_texts = list(names)
 
-            for i, (name_part, suffix) in enumerate(parsed_names):
+            for i, full_text in enumerate(full_texts):
                 x = start_x + (name_count - 1 - i) * (name_font_size + actual_spacing)
                 y = area_top - name_font_size * 0.75
-                padded = pad_name_part(name_part, max_name_len)
-                full_text = padded + suffix
                 for ch in full_text:
-                    if ch == '\u3000':
+                    if ch == '\u3000' or ch == ' ':
                         y -= name_font_size * name_char_spacing_ratio
                         continue
                     c.setFont(font_name, name_font_size)
@@ -321,15 +395,37 @@ def generate_template_pdf(config: dict, records: list, output_path: str):
             ys_area_height = page_height * yangshang_height_pct / 100
             ys_area_bottom = ys_area_top - ys_area_height
 
-            ys_start_x = ys_area_left + yangshang_font_size / 2
-            ys_y = ys_area_top - yangshang_font_size * 0.75
+            # 阳上从右往左排列，与前端 flex row-reverse 一致
+            # 减去 spacing/2 匹配前端 flex item 的 margin-right
+            ys_area_right = ys_area_left + page_width * yangshang_width_pct / 100
+            ys_start_x = ys_area_right - yangshang_spacing / 2 - yangshang_font_size / 2
 
-            ys_y = draw_vertical_text(c, '阳上', ys_start_x, ys_y, font_name, yangshang_font_size)
+            if auto_pad_yangshang:
+                parsed_ys = [split_name_suffix(n) for n in yangshang_names]
+                max_ys_len = max((len(np) for np, sf in parsed_ys), default=0)
+                ys_full_texts = [pad_name_part(np, max_ys_len) + sf for np, sf in parsed_ys]
+            else:
+                ys_full_texts = list(yangshang_names)
 
-            for name in yangshang_names:
-                ys_x = ys_start_x + yangshang_font_size + yangshang_spacing
+            first_ys = True
+            for full_text in ys_full_texts:
+                if first_ys:
+                    ys_x = ys_start_x
+                    first_ys = False
+                else:
+                    ys_x = ys_start_x - yangshang_font_size - yangshang_spacing
+                if ys_x < ys_area_left:
+                    break
                 ys_y = ys_area_top - yangshang_font_size * 0.75
-                ys_y = draw_vertical_text(c, name, ys_x, ys_y, font_name, yangshang_font_size)
+                for ch in full_text:
+                    if ch == '\u3000' or ch == ' ':
+                        ys_y -= yangshang_font_size * yangshang_char_spacing_ratio
+                        continue
+                    c.setFont(font_name, yangshang_font_size)
+                    c.drawCentredString(ys_x, ys_y, ch)
+                    ys_y -= yangshang_font_size * yangshang_char_spacing_ratio
+                    if ys_y < ys_area_bottom:
+                        break
                 ys_start_x = ys_x
 
         bottom_y = page_height * (1 - bottom_top_pct / 100) + print_offset_pt - seat_font_size * 0.75
@@ -345,6 +441,7 @@ def generate_template_pdf(config: dict, records: list, output_path: str):
             c.setFont(font_name, seat_font_size)
             c.drawCentredString(bottom_x, bottom_y, bottom_text)
 
+        c.restoreState()
         c.showPage()
 
     c.save()
@@ -408,9 +505,15 @@ def print_pdf_windows(pdf_path: str, printer_name: Optional[str] = None, page_wi
 
             img_w, img_h = img.size
 
-            scale_x = printable_width / img_w if img_w > 0 else 1.0
-            scale_y = printable_height / img_h if img_h > 0 else 1.0
-            scale = min(scale_x, scale_y, 1.0)
+            # A4 PDF 已内置打印机边距，用实际大小打印
+            # 居中后白边落入打印机不可打印区域被自然裁掉，内容不受影响
+            is_a4_pdf = page_width_mm and page_height_mm and abs(page_width_mm - 210) < 1 and abs(page_height_mm - 297) < 1
+            if is_a4_pdf:
+                scale = 1.0
+            else:
+                scale_x = printable_width / img_w if img_w > 0 else 1.0
+                scale_y = printable_height / img_h if img_h > 0 else 1.0
+                scale = min(scale_x, scale_y, 1.0)
 
             draw_w = int(img_w * scale)
             draw_h = int(img_h * scale)
@@ -467,8 +570,13 @@ async def silent_print(
     config['_template_type'] = template.模板类型
 
     layout = config.get('layout', {})
-    page_width_mm = layout.get('pageWidth', 210)
-    page_height_mm = layout.get('pageHeight', 297)
+    # 小纸A4模式下打印机按 A4 走纸；否则按模板原尺寸
+    if layout.get('smallPaperOnA4', False):
+        page_width_mm = 210
+        page_height_mm = 297
+    else:
+        page_width_mm = layout.get('pageWidth', 210)
+        page_height_mm = layout.get('pageHeight', 297)
 
     try:
         with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as tmp_file:

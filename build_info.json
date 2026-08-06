@@ -1,10 +1,10 @@
 {
-  "git_commit": "bc259a51fbda3076a6f63472cc83a4750604e280",
+  "git_commit": "cb26bbc5c7f76c444ab4e73af6050dd4ad495007",
   "git_branch": "main",
   "git_author": "mm2fox",
-  "git_message": "chore: 更新部署记录时间戳",
-  "git_date": "2026-08-04 16:52:34 +0800",
-  "version": "bc259a5",
-  "build_time": "2026-08-04T16:59:28.386299",
-  "change_summary": "bc259a5 chore: 更新部署记录时间戳\nc3c633f feat(查询): 法会查询和施主查询新增导出Excel功能\nd71dabc fix(批量粘贴): 修复清明表格式多行被合并为一行时解析失败\n2eab9be feat: 批量粘贴支持清明表格式解析,删除单行粘贴,修复登录失败无提示\nb5be8d3 feat(法会登记): 新增法会登记施主字段改为非必填\n7797c2d feat(施主): 施主姓名改为非必填，调整相关默认配置\n60ae076 fix: 法会名称显示直接取表单值，避免切换后空白\n825a667 fix: 去掉法会名称和施主下拉框的取消按钮\n73fc16d fix: 点击只读输入框切换下拉选择，去掉选择按钮，修复下拉无法展开\n0e96311 fix: 法会名称也改为只读显示+点击切换选择，彻底解决回显空白\n47c88bb chore: 更新 build_info 和 国庆寺部署记录\n88f54bc fix: 法会名称下拉框在弹窗渲染后再赋值，解决回显空白\ne4fdc55 fix: 施主下拉框改为只读显示+点击切换搜索，解决remote模式回显空白\n87b16e6 fix: 回退el-select+remote模式，修复施主姓名为空时label显示空白\nfdd19a1 fix: 施主下拉框改用el-select-v2虚拟滚动，解决大数据量下选中回显空白\ne7a115d fix: 施主查询/法会登记新增时下拉框先加载数据再开弹窗，去掉remote模式\ndb24af7 fix: 施主列表limit从50改为10000，后端去掉无关键词时500条限制\nb9d69a5 fix: 弹窗先渲染再设值，解决el-select下拉框不显示选中项\n309e86d fix: 施主下拉框去掉remote模式改为filterable，页面加载时预加载施主列表\nd6b4f21 fix: 法会查询新增登记时下拉框先加载数据再打开弹窗\n95961f8 fix: 法会记录查询操作列加宽并固定右侧，避免按钮换行\nd3d5258 feat: 施主/法会管理功能优化及打印对齐修复\n419198d feat: 添加Excel粘贴录入功能及部署打包工具\nefc4bed fix: 修复BASE_PATH未定义导致load_build_version报错\ne850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
+  "git_message": "fix(导出Excel): 修复中文文件名导致响应头编码崩溃",
+  "git_date": "2026-08-04 17:02:48 +0800",
+  "version": "cb26bbc",
+  "build_time": "2026-08-06T18:12:23.628818",
+  "change_summary": "cb26bbc fix(导出Excel): 修复中文文件名导致响应头编码崩溃\nbc259a5 chore: 更新部署记录时间戳\nc3c633f feat(查询): 法会查询和施主查询新增导出Excel功能\nd71dabc fix(批量粘贴): 修复清明表格式多行被合并为一行时解析失败\n2eab9be feat: 批量粘贴支持清明表格式解析,删除单行粘贴,修复登录失败无提示\nb5be8d3 feat(法会登记): 新增法会登记施主字段改为非必填\n7797c2d feat(施主): 施主姓名改为非必填，调整相关默认配置\n60ae076 fix: 法会名称显示直接取表单值，避免切换后空白\n825a667 fix: 去掉法会名称和施主下拉框的取消按钮\n73fc16d fix: 点击只读输入框切换下拉选择，去掉选择按钮，修复下拉无法展开\n0e96311 fix: 法会名称也改为只读显示+点击切换选择，彻底解决回显空白\n47c88bb chore: 更新 build_info 和 国庆寺部署记录\n88f54bc fix: 法会名称下拉框在弹窗渲染后再赋值，解决回显空白\ne4fdc55 fix: 施主下拉框改为只读显示+点击切换搜索，解决remote模式回显空白\n87b16e6 fix: 回退el-select+remote模式，修复施主姓名为空时label显示空白\nfdd19a1 fix: 施主下拉框改用el-select-v2虚拟滚动，解决大数据量下选中回显空白\ne7a115d fix: 施主查询/法会登记新增时下拉框先加载数据再开弹窗，去掉remote模式\ndb24af7 fix: 施主列表limit从50改为10000，后端去掉无关键词时500条限制\nb9d69a5 fix: 弹窗先渲染再设值，解决el-select下拉框不显示选中项\n309e86d fix: 施主下拉框去掉remote模式改为filterable，页面加载时预加载施主列表\nd6b4f21 fix: 法会查询新增登记时下拉框先加载数据再打开弹窗\n95961f8 fix: 法会记录查询操作列加宽并固定右侧，避免按钮换行\nd3d5258 feat: 施主/法会管理功能优化及打印对齐修复\n419198d feat: 添加Excel粘贴录入功能及部署打包工具\nefc4bed fix: 修复BASE_PATH未定义导致load_build_version报错\ne850c0f feat: tkinter控制窗口和托盘显示版本信息\n425fbf4 feat: 添加版本信息管理功能，打包时自动记录git信息\n7a445b6 feat: 实现打印模板权限管理和数据库查询优化\nb1099df Remove PDF files\ne553b65 Remove uploads/templates from tracking and add to .gitignore"
 }
