@@ -66,7 +66,7 @@ def register_chinese_fonts():
         ('STXingkai', ['STXINGKA.TTF', 'stxingka.ttf']),
         ('SimSun', ['simsun.ttc', 'SIMSUN.TTC']),
         ('SimHei', ['simhei.ttf', 'SIMHEI.TTF']),
-        ('KaiTi', ['kaiti.ttf', 'KAITI.TTF']),
+        ('KaiTi', ['simkai.ttf', 'SIMKAI.TTF', 'kaiti.ttf', 'KAITI.TTF']),
     ]
 
     for name, paths in font_specs:
