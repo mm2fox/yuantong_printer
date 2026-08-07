@@ -191,6 +191,15 @@ def pad_name_part(name_part, max_len):
     return result
 
 
+def normalize_raw_name(name):
+    """保留原始模式下规范化姓名：合并连续空白为单个全角空格，
+    避免多个半角空格在竖排时各占一行高导致后缀被截断。
+    与前端 HTML 默认合并空格的行为一致，保证 WYSIWYG。"""
+    if not name:
+        return ''
+    return '\u3000'.join(name.split())
+
+
 def generate_template_pdf(config: dict, records: list, output_path: str, target_page_size: Optional[tuple] = None):
     from reportlab.pdfgen import canvas
     from reportlab.lib.units import mm
@@ -374,11 +383,13 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
                 max_name_len = max((len(np) for np, sf in parsed_names), default=0)
                 full_texts = [pad_name_part(np, max_name_len) + sf for np, sf in parsed_names]
             else:
-                full_texts = list(names)
+                # 保留原始模式：合并连续空白为单个全角空格，避免多个半角空格占多行导致后缀截断
+                full_texts = [normalize_raw_name(n) for n in names]
 
             for i, full_text in enumerate(full_texts):
                 x = start_x + (name_count - 1 - i) * (name_font_size + actual_spacing)
                 y = area_top - name_font_size * 0.75
+                # 不截断超出区域的字符,与前端 overflow:visible 一致 (WYSIWYG)
                 for ch in full_text:
                     if ch == '\u3000' or ch == ' ':
                         y -= name_font_size * name_char_spacing_ratio
@@ -386,8 +397,6 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
                     c.setFont(font_name, name_font_size)
                     c.drawCentredString(x, y, ch)
                     y -= name_font_size * name_char_spacing_ratio
-                    if y < area_bottom:
-                        break
 
         if is_wangsheng and yangshang_names and 'yangshang' in display_items:
             ys_area_top = page_height * (1 - yangshang_top_pct / 100) + print_offset_pt
@@ -405,7 +414,8 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
                 max_ys_len = max((len(np) for np, sf in parsed_ys), default=0)
                 ys_full_texts = [pad_name_part(np, max_ys_len) + sf for np, sf in parsed_ys]
             else:
-                ys_full_texts = list(yangshang_names)
+                # 保留原始模式：合并连续空白为单个全角空格，避免多个半角空格占多行导致后缀截断
+                ys_full_texts = [normalize_raw_name(n) for n in yangshang_names]
 
             first_ys = True
             for full_text in ys_full_texts:
@@ -417,6 +427,7 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
                 if ys_x < ys_area_left:
                     break
                 ys_y = ys_area_top - yangshang_font_size * 0.75
+                # 不截断超出区域的字符,与前端 overflow:visible 一致 (WYSIWYG)
                 for ch in full_text:
                     if ch == '\u3000' or ch == ' ':
                         ys_y -= yangshang_font_size * yangshang_char_spacing_ratio
@@ -424,22 +435,23 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
                     c.setFont(font_name, yangshang_font_size)
                     c.drawCentredString(ys_x, ys_y, ch)
                     ys_y -= yangshang_font_size * yangshang_char_spacing_ratio
-                    if ys_y < ys_area_bottom:
-                        break
                 ys_start_x = ys_x
 
         bottom_y = page_height * (1 - bottom_top_pct / 100) + print_offset_pt - seat_font_size * 0.75
         bottom_x = page_width * bottom_left_pct / 100
-        bottom_text = ''
+        # 每个信息段独占一行,与前端预览的换行行为一致(WYSIWYG)
+        bottom_lines = []
         if 'shizhu_name' in display_items and record.shizhu_name:
-            bottom_text += record.shizhu_name + ' '
+            bottom_lines.append(record.shizhu_name)
         if 'fahui_name' in display_items and record.fahui_name:
-            bottom_text += record.fahui_name + ' '
+            bottom_lines.append(record.fahui_name)
         if 'seat' in display_items and record.zuoweinum:
-            bottom_text += str(record.zuoweinum)
-        if bottom_text:
+            bottom_lines.append(str(record.zuoweinum))
+        if bottom_lines:
             c.setFont(font_name, seat_font_size)
-            c.drawCentredString(bottom_x, bottom_y, bottom_text)
+            line_height_pt = seat_font_size * 1.2
+            for i, line in enumerate(bottom_lines):
+                c.drawCentredString(bottom_x, bottom_y - i * line_height_pt, line)
 
         c.restoreState()
         c.showPage()

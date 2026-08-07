@@ -682,9 +682,16 @@ const padNamePart = (namePart, maxLen) => {
   return result
 }
 
+// 保留原始模式下规范化姓名：合并连续空白为单个全角空格
+// 与后端 silent_print.py 的 normalize_raw_name 一致，保证 WYSIWYG
+const normalizeRawName = (name) => {
+  if (!name) return ''
+  return name.split(/\s+/).filter(Boolean).join('\u3000')
+}
+
 const alignedSampleNames = computed(() => {
   if (layoutConfig.autoPadNames === false) {
-    return sampleNames.value
+    return sampleNames.value.map(normalizeRawName)
   }
   return parsedSampleNames.value.map(parsed => {
     const padded = padNamePart(parsed.namePart, maxSampleNamePartLen.value)
@@ -702,7 +709,7 @@ const maxSampleYangshangNamePartLen = computed(() => {
 
 const alignedSampleYangshangNames = computed(() => {
   if (layoutConfig.autoPadYangshang === false) {
-    return sampleYangshangNames.value
+    return sampleYangshangNames.value.map(normalizeRawName)
   }
   return parsedSampleYangshangNames.value.map(parsed => {
     const padded = padNamePart(parsed.namePart, maxSampleYangshangNamePartLen.value)
@@ -720,7 +727,7 @@ const maxPreviewNamePartLen = computed(() => {
 
 const alignedPreviewNames = computed(() => {
   if (previewLayoutConfig.autoPadNames === false) {
-    return previewNames.value
+    return previewNames.value.map(normalizeRawName)
   }
   return parsedPreviewNames.value.map(parsed => {
     const padded = padNamePart(parsed.namePart, maxPreviewNamePartLen.value)
@@ -738,7 +745,7 @@ const maxPreviewYangshangNamePartLen = computed(() => {
 
 const alignedPreviewYangshangNames = computed(() => {
   if (previewLayoutConfig.autoPadYangshang === false) {
-    return previewYangshangNames.value
+    return previewYangshangNames.value.map(normalizeRawName)
   }
   return parsedPreviewYangshangNames.value.map(parsed => {
     const padded = padNamePart(parsed.namePart, maxPreviewYangshangNamePartLen.value)
@@ -792,7 +799,8 @@ const getYangshangItemStyle = (cfg) => ({
   fontSize: (cfg.yangshangFontSize || 18) + 'px',
   lineHeight: '1.2',
   letterSpacing: ((cfg.yangshangCharSpacing || 1.3) - 1.0) + 'em',
-  margin: '0 ' + ((cfg.yangshangSpacing || 5) / 2) + 'px'
+  margin: '0 ' + ((cfg.yangshangSpacing || 5) / 2) + 'px',
+  whiteSpace: 'nowrap'
 })
 
 const getNameItemStyle = (cfg) => ({
@@ -800,7 +808,8 @@ const getNameItemStyle = (cfg) => ({
   fontSize: cfg.nameFontSize + 'px',
   lineHeight: '1.2',
   letterSpacing: ((cfg.nameCharSpacing || 1.3) - 1.0) + 'em',
-  margin: '0 ' + cfg.nameSpacing / 2 + 'px'
+  margin: '0 ' + cfg.nameSpacing / 2 + 'px',
+  whiteSpace: 'nowrap'
 })
 
 const getBottomAreaStyle = (cfg) => {
@@ -1520,9 +1529,10 @@ onMounted(() => { fetchData() })
 .preview-yangshang-area { display: flex; flex-direction: row-reverse; align-items: flex-start; }
 .preview-names-area { display: flex; flex-direction: row-reverse; justify-content: center; align-items: flex-start; }
 .preview-bottom { position: absolute; z-index: 1; }
+.preview-bottom span { display: block; }
 .editable-cell { outline: none; border-radius: 2px; transition: background 0.15s; min-width: 1em; min-height: 1em; }
 .editable-cell:hover { background: rgba(64, 158, 255, 0.12); box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.3); }
 .editable-cell:focus { background: rgba(64, 158, 255, 0.18); box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.6); }
-.add-name-btn { white-space: nowrap; user-select: none; }
+.add-name-btn { white-space: nowrap; user-select: none; position: absolute; left: 0; top: 0; }
 .add-name-btn:hover { color: #409eff !important; border-color: #409eff !important; }
 </style>

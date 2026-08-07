@@ -8,6 +8,7 @@ import webbrowser
 import json
 import asyncio
 import shutil
+import subprocess
 from pathlib import Path
 import ctypes
 import tempfile
@@ -631,17 +632,192 @@ def show_control_window(url):
     def show_window():
         root.deiconify()
 
+    def upgrade_self():
+        from tkinter import filedialog, messagebox
+
+        current_exe = sys.executable if getattr(sys, "frozen", False) else None
+        if not current_exe:
+            messagebox.showerror("升级", "非打包模式，无法升级。请直接替换源码文件。")
+            return
+
+        exe_dir = os.path.dirname(current_exe)
+        exe_name = os.path.basename(current_exe)
+
+        src_path = filedialog.askopenfilename(
+            title=f"选择新版 {exe_name}",
+            initialdir=exe_dir,
+            filetypes=[("可执行文件", "*.exe"), ("所有文件", "*.*")],
+        )
+        if not src_path:
+            return
+
+        if os.path.normpath(src_path) == os.path.normpath(current_exe):
+            messagebox.showwarning("升级", "选中的文件就是当前正在运行的程序，请选择新版本。")
+            return
+
+        version_display = BUILD_VERSION or "未知"
+        if not messagebox.askyesno(
+            "确认升级",
+            f"当前版本: {version_display}\n\n"
+            "升级将执行以下操作：\n\n"
+            "1. 同步并备份当前数据（数据库和上传文件）\n"
+            "2. 关闭当前程序\n"
+            "3. 备份旧程序并替换为新版本\n"
+            "4. 启动新版本验证\n"
+            "5. 新版本启动失败时自动回滚到旧版本\n\n"
+            "数据库和上传文件不会被覆盖，升级后数据保留。\n\n"
+            "确认要升级吗？",
+        ):
+            return
+
+        ps1_path = os.path.join(exe_dir, "_upgrade.ps1")
+        ps1_template = r'''$ErrorActionPreference = 'Stop'
+$exeDir = '__EXE_DIR__'
+$exeName = '__EXE_NAME__'
+$srcPath = '__SRC_PATH__'
+$exeFullName = Join-Path $exeDir $exeName
+$procName = [System.IO.Path]::GetFileNameWithoutExtension($exeName)
+
+Set-Location $exeDir
+
+Write-Host '[1/5] 等待旧进程退出（含 bootloader，最多 60 秒）...'
+$waitCount = 0
+$found = $true
+while ($waitCount -lt 60) {
+    $p = Get-Process -Name $procName -ErrorAction SilentlyContinue
+    if (-not $p) { $found = $false; break }
+    Start-Sleep -Seconds 1
+    $waitCount++
+}
+if ($found) {
+    Write-Host '[WARN] 旧进程 60 秒未自然退出，强制终止...'
+    Get-Process -Name $procName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 5
+}
+
+Write-Host '[2/5] 清理残留文件...'
+Remove-Item -LiteralPath (Join-Path $exeDir "$exeName.failed") -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath (Join-Path $exeDir "$exeName.bak") -Force -ErrorAction SilentlyContinue
+
+Write-Host '[3/5] 备份旧程序并替换为新版本...'
+try {
+    Move-Item -LiteralPath $exeFullName -Destination (Join-Path $exeDir "$exeName.bak") -Force
+    Copy-Item -LiteralPath $srcPath -Destination $exeFullName -Force
+} catch {
+    Write-Host "[ERROR] 替换失败: $($_.Exception.Message)"
+    Write-Host '正在回滚...'
+    try {
+        Move-Item -LiteralPath (Join-Path $exeDir "$exeName.bak") -Destination $exeFullName -Force
+    } catch {
+        Write-Host "[ERROR] 回滚也失败: $($_.Exception.Message)"
+    }
+    Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+    Read-Host '按回车退出'
+    exit 1
+}
+
+try { Unblock-File -Path $exeFullName -ErrorAction SilentlyContinue } catch {}
+Start-Sleep -Seconds 3
+
+Write-Host "[4/5] 启动新 $exeName 验证..."
+Start-Process -FilePath $exeFullName
+Start-Sleep -Seconds 10
+
+Write-Host '[5/5] 检测新进程是否存活...'
+$checkCount = 0
+$ok = $false
+while ($checkCount -lt 15) {
+    $p = Get-Process -Name $procName -ErrorAction SilentlyContinue
+    if ($p) { $ok = $true; break }
+    Start-Sleep -Seconds 1
+    $checkCount++
+}
+
+if (-not $ok) {
+    Write-Host '[ERROR] 新程序启动失败！正在回滚...'
+    $bakPath = Join-Path $exeDir "$exeName.bak"
+    if (Test-Path -LiteralPath $bakPath) {
+        try {
+            Move-Item -LiteralPath $exeFullName -Destination (Join-Path $exeDir "$exeName.failed") -Force -ErrorAction SilentlyContinue
+        } catch {}
+        Move-Item -LiteralPath $bakPath -Destination $exeFullName -Force
+        Start-Process -FilePath $exeFullName
+        Write-Host '已回滚到旧版本'
+    } else {
+        Write-Host '没有备份可回滚，请手动检查'
+    }
+    Remove-Item -LiteralPath (Join-Path $exeDir "$exeName.failed") -Force -ErrorAction SilentlyContinue
+    Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+    Read-Host '按回车退出'
+    exit 1
+}
+
+Write-Host '升级成功！'
+Remove-Item -LiteralPath (Join-Path $exeDir "$exeName.bak") -Force -ErrorAction SilentlyContinue
+Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+exit 0
+'''
+        ps1_content = (ps1_template
+                        .replace('__EXE_DIR__', exe_dir)
+                        .replace('__EXE_NAME__', exe_name)
+                        .replace('__SRC_PATH__', src_path))
+        try:
+            with open(ps1_path, "w", encoding="utf-8-sig") as f:
+                f.write(ps1_content)
+        except Exception as e:
+            messagebox.showerror("升级", f"生成升级脚本失败: {e}")
+            return
+
+        log_message(f"升级: 已生成升级脚本 {ps1_path}，即将退出当前程序")
+        try:
+            clean_env = os.environ.copy()
+            for k in list(clean_env.keys()):
+                if k.startswith("_MEI") or k.startswith("_PYI") or k.startswith("PYINSTALLER"):
+                    del clean_env[k]
+            subprocess.Popen(
+                ["powershell", "-ExecutionPolicy", "Bypass", "-NoProfile", "-File", ps1_path],
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+                cwd=exe_dir,
+                env=clean_env,
+            )
+        except Exception as e:
+            messagebox.showerror("升级", f"启动升级脚本失败: {e}")
+            return
+
+        def _upgrade_watchdog():
+            time.sleep(15)
+            os._exit(0)
+
+        threading.Thread(target=_upgrade_watchdog, daemon=True).start()
+
+        def _do_upgrade_quit():
+            log_message("升级: 退出当前程序以完成升级")
+            final_sync()
+            if tray_icon:
+                tray_icon.stop()
+            os._exit(0)
+
+        root.after(200, _do_upgrade_quit)
+
     btn_frame = tk.Frame(frame, bg="#f5f5f5")
     btn_frame.pack(pady=5)
 
-    ttk.Button(btn_frame, text="打开浏览器", command=open_browser).pack(side="left", padx=5)
-    ttk.Button(btn_frame, text="隐藏到托盘", command=hide_to_tray).pack(side="left", padx=5)
-    ttk.Button(btn_frame, text="退出", command=exit_app).pack(side="left", padx=5)
+    btn_row1 = tk.Frame(btn_frame, bg="#f5f5f5")
+    btn_row1.pack(pady=(0, 5))
+    ttk.Button(btn_row1, text="打开浏览器", command=open_browser).pack(side="left", padx=5)
+    ttk.Button(btn_row1, text="升级", command=upgrade_self).pack(side="left", padx=5)
+
+    btn_row2 = tk.Frame(btn_frame, bg="#f5f5f5")
+    btn_row2.pack()
+    ttk.Button(btn_row2, text="隐藏到托盘", command=hide_to_tray).pack(side="left", padx=5)
+    ttk.Button(btn_row2, text="退出", command=exit_app).pack(side="left", padx=5)
 
     tray_icon = create_tray_icon(url, show_window, root)
 
     def on_close():
-        hide_to_tray()
+        from tkinter import messagebox
+        if messagebox.askyesno("确认关闭", "确定要关闭程序吗？关闭后将停止服务。"):
+            exit_app()
 
     root.protocol("WM_DELETE_WINDOW", on_close)
     root.mainloop()

@@ -233,9 +233,16 @@ const padNamePart = (namePart, maxLen) => {
   return result
 }
 
+// 保留原始模式下规范化姓名：合并连续空白为单个全角空格
+// 与后端 silent_print.py 的 normalize_raw_name 一致，保证 WYSIWYG
+const normalizeRawName = (name) => {
+  if (!name) return ''
+  return name.split(/\s+/).filter(Boolean).join('\u3000')
+}
+
 const alignedMainNames = computed(() => {
   if (resolvedLayout.value.autoPadNames === false) {
-    return mainNames.value
+    return mainNames.value.map(normalizeRawName)
   }
   return parsedMainNames.value.map(parsed => {
     const padded = padNamePart(parsed.namePart, maxNamePartLen.value)
@@ -253,7 +260,7 @@ const maxYangshangNamePartLen = computed(() => {
 
 const alignedYangshangNames = computed(() => {
   if (resolvedLayout.value.autoPadYangshang === false) {
-    return yangshangNames.value
+    return yangshangNames.value.map(normalizeRawName)
   }
   return parsedYangshangNames.value.map(parsed => {
     const padded = padNamePart(parsed.namePart, maxYangshangNamePartLen.value)
@@ -312,7 +319,8 @@ const nameItemStyle = computed(() => {
     fontSize: (l.nameFontSize || 52) + 'px',
     lineHeight: '1.2',
     letterSpacing: ((l.nameCharSpacing || 1.3) - 1.0) + 'em',
-    margin: '0 ' + ((l.nameSpacing || 20) / 2) + 'px'
+    margin: '0 ' + ((l.nameSpacing || 20) / 2) + 'px',
+    whiteSpace: 'nowrap'
   }
 })
 
@@ -323,7 +331,8 @@ const yangshangItemStyle = computed(() => {
     fontSize: (l.yangshangFontSize || 18) + 'px',
     lineHeight: '1.2',
     letterSpacing: ((l.yangshangCharSpacing || 1.3) - 1.0) + 'em',
-    margin: '0 ' + ((l.yangshangSpacing || 5) / 2) + 'px'
+    margin: '0 ' + ((l.yangshangSpacing || 5) / 2) + 'px',
+    whiteSpace: 'nowrap'
   }
 })
 
@@ -577,4 +586,5 @@ const doPrint = async () => {
 .preview-yangshang-area { display: flex; flex-direction: row-reverse; align-items: flex-start; }
 .preview-names-area { display: flex; flex-direction: row-reverse; justify-content: center; align-items: flex-start; }
 .preview-bottom { position: absolute; z-index: 1; }
+.preview-bottom span { display: block; }
 </style>
