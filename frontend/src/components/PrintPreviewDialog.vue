@@ -41,7 +41,9 @@
             <img v-if="resolvedLayout.backgroundImage" :src="resolvedLayout.backgroundImage" class="preview-bg-image" :style="{ opacity: (resolvedLayout.backgroundOpacity || 30) / 100 }" />
             <div class="preview-content" :style="previewContentStyle">
               <div v-if="isWangSheng && resolvedDisplayItems.includes('yangshang')" class="preview-yangshang-area" :style="yangshangAreaStyle">
-              <div v-for="(name, idx) in alignedYangshangNames" :key="'ys-'+idx" :style="yangshangItemStyle">{{ name }}</div>
+              <div v-for="(pair, pIdx) in yangshangPairs(alignedYangshangNames, resolvedLayout.yangshangRows)" :key="'ysp-'+pIdx" class="ys-pair" :style="ysPairStyle">
+                <div v-for="item in pair" :key="'ys-'+item.idx" :style="getYangshangItemStyle(item.idx)">{{ item.name }}</div>
+              </div>
             </div>
               <div class="preview-names-area" :style="namesAreaStyle">
                 <div v-for="(name, idx) in alignedMainNames" :key="'n-'+idx" :style="nameItemStyle">{{ name }}</div>
@@ -283,7 +285,8 @@ const namesAreaStyle = computed(() => {
     flexDirection: 'row-reverse',
     justifyContent: 'center',
     alignItems: 'flex-start',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    border: '1px dashed #f56c6c'
   }
 })
 
@@ -301,7 +304,8 @@ const yangshangAreaStyle = computed(() => {
     display: 'flex',
     flexDirection: 'row-reverse',
     alignItems: 'flex-start',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    border: '1px dashed #67c23a'
   }
 })
 
@@ -324,17 +328,45 @@ const nameItemStyle = computed(() => {
   }
 })
 
-const yangshangItemStyle = computed(() => {
+const yangshangPairs = (names, rows) => {
+  const arr = names || []
+  if ((rows || 1) === 1) {
+    return arr.map((name, i) => [{ name, idx: i }])
+  }
+  const pairs = []
+  for (let i = 0; i < arr.length; i += 2) {
+    const pair = []
+    if (arr[i] !== undefined) pair.push({ name: arr[i], idx: i })
+    if (arr[i + 1] !== undefined) pair.push({ name: arr[i + 1], idx: i + 1 })
+    pairs.push(pair)
+  }
+  return pairs
+}
+
+const ysPairStyle = computed(() => {
+  const l = resolvedLayout.value
+  return {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: ((l.yangshangRows || 1) === 2) ? 'space-between' : 'flex-start',
+    height: '100%',
+    alignItems: 'center',
+    margin: '0 ' + ((l.yangshangSpacing || 5) / 2) + 'px',
+    boxSizing: 'border-box'
+  }
+})
+
+const getYangshangItemStyle = (idx) => {
   const l = resolvedLayout.value
   return {
     writingMode: 'vertical-rl',
     fontSize: (l.yangshangFontSize || 18) + 'px',
     lineHeight: '1.2',
     letterSpacing: ((l.yangshangCharSpacing || 1.3) - 1.0) + 'em',
-    margin: '0 ' + ((l.yangshangSpacing || 5) / 2) + 'px',
+    margin: '0',
     whiteSpace: 'nowrap'
   }
-})
+}
 
 const bottomAreaStyle = computed(() => {
   const l = resolvedLayout.value

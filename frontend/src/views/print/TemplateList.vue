@@ -268,6 +268,13 @@
                 <el-switch v-model="layoutConfig.autoPadYangshang" active-text="对齐补空格" inactive-text="保留原始" />
                 <span style="margin-left: 8px; color: #909399; font-size: 12px;">关闭后阳上按原始内容打印，不自动补空格对齐</span>
               </el-form-item>
+              <el-form-item label="排列排数">
+                <el-radio-group v-model="layoutConfig.yangshangRows">
+                  <el-radio :label="1">一排</el-radio>
+                  <el-radio :label="2">两排（上下错开）</el-radio>
+                </el-radio-group>
+                <span style="margin-left: 8px; color: #909399; font-size: 12px;">两排时第1/3/5…个在上排，第2/4/6…个在下排</span>
+              </el-form-item>
               <el-row :gutter="16">
                 <el-col :span="12">
                   <el-form-item label="区域上边距">
@@ -349,12 +356,14 @@
                   <img v-if="layoutConfig.backgroundImage" :src="layoutConfig.backgroundImage" class="preview-bg-image" :style="{ opacity: layoutConfig.backgroundOpacity / 100 }" />
                   <div class="preview-content" :style="{ fontFamily: layoutConfig.fontFamily }">
                     <div v-if="isWangSheng && displayItems.includes('yangshang')" class="preview-yangshang-area" :style="yangshangAreaStyle">
-                    <div v-for="(name, idx) in alignedSampleYangshangNames" :key="'ys-'+idx" :style="yangshangItemStyle" class="editable-cell" contenteditable="plaintext-only" @focus="onSampleFocus($event, idx, 'yangshang')" @blur="onSampleBlur($event, idx, 'yangshang')">{{ name }}</div>
+                    <div v-for="(pair, pIdx) in yangshangPairs(alignedSampleYangshangNames, layoutConfig.yangshangRows)" :key="'ysp-'+pIdx" class="ys-pair" :style="ysPairStyle(layoutConfig)">
+                      <div v-for="item in pair" :key="'ys-'+item.idx" :style="getYangshangItemStyle(layoutConfig, item.idx)" class="editable-cell" contenteditable="plaintext-only" @focus="onSampleFocus($event, item.idx, 'yangshang')" @blur="onSampleBlur($event, item.idx, 'yangshang')">{{ item.name }}</div>
+                    </div>
                     <div class="add-name-btn" :style="{ writingMode: 'vertical-rl', fontSize: layoutConfig.yangshangFontSize + 'px', lineHeight: '1.2', color: '#c0c4cc', cursor: 'pointer', border: '1px dashed #dcdfe6', padding: '2px 4px' }" @click="addSampleName('yangshang')">+ 添加</div>
                   </div>
                     <div class="preview-names-area" :style="namesAreaStyle">
                       <div v-for="(name, idx) in alignedSampleNames" :key="'n-'+idx" :style="nameItemStyle" class="editable-cell" contenteditable="plaintext-only" @focus="onSampleFocus($event, idx, 'name')" @blur="onSampleBlur($event, idx, 'name')">{{ name }}</div>
-                      <div class="add-name-btn" :style="nameItemStyle" style="color: #c0c4cc; cursor: pointer; border: 1px dashed #dcdfe6; padding: 2px 4px;" @click="addSampleName('name')">+ 添加</div>
+                      <div class="add-name-btn" :style="nameItemStyle" style="position: absolute; left: 0; top: 0; z-index: 5; color: #c0c4cc; cursor: pointer; border: 1px dashed #dcdfe6; padding: 2px 4px;" @click="addSampleName('name')">+ 添加</div>
                     </div>
                     <div v-if="displayItems.includes('seat') || displayItems.includes('fahui_name') || displayItems.includes('shizhu_name')" class="preview-bottom" :style="bottomAreaStyle">
                       <span v-if="displayItems.includes('shizhu_name')" class="editable-cell" contenteditable="plaintext-only" @blur="onBottomBlur($event, 'shizhu_name')">{{ sampleData.shizhu_name }} </span>
@@ -441,7 +450,9 @@
               <img v-if="previewLayoutConfig.backgroundImage" :src="previewLayoutConfig.backgroundImage" class="preview-bg-image" :style="{ opacity: previewLayoutConfig.backgroundOpacity / 100 }" />
               <div class="preview-content" :style="{ fontFamily: previewLayoutConfig.fontFamily }">
                 <div v-if="previewIsWangSheng && previewDisplayItems.includes('yangshang')" class="preview-yangshang-area" :style="getYangshangAreaStyle(previewLayoutConfig)">
-                <div v-for="(name, idx) in alignedPreviewYangshangNames" :key="'ys-'+idx" :style="getYangshangItemStyle(previewLayoutConfig)">{{ name }}</div>
+                <div v-for="(pair, pIdx) in yangshangPairs(alignedPreviewYangshangNames, previewLayoutConfig.yangshangRows)" :key="'ysp-'+pIdx" class="ys-pair" :style="ysPairStyle(previewLayoutConfig)">
+                  <div v-for="item in pair" :key="'ys-'+item.idx" :style="getYangshangItemStyle(previewLayoutConfig, item.idx)">{{ item.name }}</div>
+                </div>
               </div>
                 <div class="preview-names-area" :style="getNamesAreaStyle(previewLayoutConfig)">
                   <div v-for="(name, idx) in alignedPreviewNames" :key="'n-'+idx" :style="getNameItemStyle(previewLayoutConfig)">{{ name }}</div>
@@ -556,6 +567,7 @@ const defaultLayoutConfig = {
   yangshangLeftPct: 2,
   yangshangWidthPct: 20,
   yangshangHeightPct: 55,
+  yangshangRows: 1,
   seatFontSize: 24,
   bottomTopPct: 90,
   bottomLeftPct: 50,
@@ -756,7 +768,6 @@ const alignedPreviewYangshangNames = computed(() => {
 const namesAreaStyle = computed(() => getNamesAreaStyle(layoutConfig))
 const yangshangAreaStyle = computed(() => getYangshangAreaStyle(layoutConfig))
 const nameItemStyle = computed(() => getNameItemStyle(layoutConfig))
-const yangshangItemStyle = computed(() => getYangshangItemStyle(layoutConfig))
 const bottomAreaStyle = computed(() => getBottomAreaStyle(layoutConfig))
 
 const getNamesAreaStyle = (cfg) => {
@@ -773,7 +784,8 @@ const getNamesAreaStyle = (cfg) => {
     flexDirection: 'row-reverse',
     justifyContent: 'center',
     alignItems: 'flex-start',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    border: '1px dashed #f56c6c'
   }
 }
 
@@ -790,18 +802,46 @@ const getYangshangAreaStyle = (cfg) => {
     display: 'flex',
     flexDirection: 'row-reverse',
     alignItems: 'flex-start',
-    boxSizing: 'border-box'
+    boxSizing: 'border-box',
+    border: '1px dashed #67c23a'
   }
 }
 
-const getYangshangItemStyle = (cfg) => ({
-  writingMode: 'vertical-rl',
-  fontSize: (cfg.yangshangFontSize || 18) + 'px',
-  lineHeight: '1.2',
-  letterSpacing: ((cfg.yangshangCharSpacing || 1.3) - 1.0) + 'em',
+const yangshangPairs = (names, rows) => {
+  const arr = names || []
+  if ((rows || 1) === 1) {
+    return arr.map((name, i) => [{ name, idx: i }])
+  }
+  const pairs = []
+  for (let i = 0; i < arr.length; i += 2) {
+    const pair = []
+    if (arr[i] !== undefined) pair.push({ name: arr[i], idx: i })
+    if (arr[i + 1] !== undefined) pair.push({ name: arr[i + 1], idx: i + 1 })
+    pairs.push(pair)
+  }
+  return pairs
+}
+
+const ysPairStyle = (cfg) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: ((cfg.yangshangRows || 1) === 2) ? 'space-between' : 'flex-start',
+  height: '100%',
+  alignItems: 'center',
   margin: '0 ' + ((cfg.yangshangSpacing || 5) / 2) + 'px',
-  whiteSpace: 'nowrap'
+  boxSizing: 'border-box'
 })
+
+const getYangshangItemStyle = (cfg, idx) => {
+  return {
+    writingMode: 'vertical-rl',
+    fontSize: (cfg.yangshangFontSize || 18) + 'px',
+    lineHeight: '1.2',
+    letterSpacing: ((cfg.yangshangCharSpacing || 1.3) - 1.0) + 'em',
+    margin: '0',
+    whiteSpace: 'nowrap'
+  }
+}
 
 const getNameItemStyle = (cfg) => ({
   writingMode: 'vertical-rl',

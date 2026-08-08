@@ -371,8 +371,8 @@
       </el-form>
 
       <el-alert type="info" :closable="false" style="margin-bottom: 12px;">
-        <div>从Excel复制多行数据（每行一条记录），粘贴到下方文本框。点击"解析"后可预览数据，确认后批量创建。</div>
-        <div style="margin-top:4px; color:#909399; font-size:12px;">Excel列顺序：类型 | 牌位 | 金额 | 每月放生姓名 | 姓名2 | 姓名3 | 姓名4 | 姓名5</div>
+        <div>从Excel或登记表复制多行数据（每行一条记录），粘贴到下方文本框。点击"解析"后可预览数据，确认后批量创建。</div>
+        <div style="margin-top:4px; color:#909399; font-size:12px;">自动识别列：凭证编号、施主姓名、法会名称、牌位、金额、类型(往生/延生)、登记日期、经办人、打印状态、姓名1~5 均可，列顺序不限。</div>
       </el-alert>
 
       <el-input
@@ -1229,15 +1229,93 @@ const parseBatchPaste = () => {
       preview.push(row)
     }
   } else {
-    // 法会常规表格式：逐行解析（每行一条）
-    const lines = raw.split('\n').filter(l => l.trim())
+    // 法会常规表格式：逐行解析（每行一条），按列内容自动识别语义
+    const lines = raw.split(/\r?\n/).filter(l => l.trim())
+    if (lines.length === 0) {
+      batchPastePreview.value = []
+      ElMessage.warning('未解析到有效数据')
+      return
+    }
+
+    // 统计每列的非空值，用于按内容自动识别列语义
+    const colCount = Math.max(...lines.map(l => l.split('\t').length))
+    const colValues = Array.from({ length: colCount }, () => [])
     for (const line of lines) {
       const cols = line.split('\t').map(c => c.trim())
-      if (cols.length < 4) continue
+      for (let i = 0; i < colCount; i++) {
+        if (cols[i]) colValues[i].push(cols[i])
+      }
+    }
 
-      const type = cols[2] || '延生'
+    const isDateStr = (v) => /^\d{4}-\d{1,2}-\d{1,2}$/.test(v)
+    const isAmountStr = (v) => {
+      if (!v || v === '长期' || isDateStr(v)) return false
+      const n = parseFloat(v)
+      return !isNaN(n) && isFinite(n)
+    }
+    const isPaiweiStr = (v) => ['大牌', '中牌', '小牌', '大', '中', '小'].includes(v)
+
+    let typeCol = -1, paiweiCol = -1, amountCol = -1
+    const metaCols = new Set()
+
+    for (let i = 0; i < colCount; i++) {
+      const vals = colValues[i]
+      if (vals.length === 0) continue
+      if (typeCol === -1 && vals.some(v => v === '往生' || v === '延生')) {
+        typeCol = i; metaCols.add(i); continue
+      }
+      if (paiweiCol === -1 && vals.some(isPaiweiStr)) {
+        paiweiCol = i; metaCols.add(i); continue
+      }
+      if (vals.some(v => v === '已打印' || v === '未打印')) { metaCols.add(i); continue }
+      if (vals.some(v => /^FH/i.test(v))) { metaCols.add(i); continue }
+      if (vals.some(isDateStr)) { metaCols.add(i); continue }
+    }
+
+    // 金额列：优先在牌位列之后查找数字列，避免误识别座次等序号列
+    const amountStart = paiweiCol >= 0 ? paiweiCol + 1 : 0
+    for (let i = amountStart; i < colCount; i++) {
+      const vals = colValues[i]
+      if (vals.length === 0 || metaCols.has(i)) continue
+      if (vals.some(isAmountStr)) { amountCol = i; metaCols.add(i); break }
+    }
+    if (amountCol === -1) {
+      for (let i = 0; i < colCount; i++) {
+        const vals = colValues[i]
+        if (vals.length === 0 || metaCols.has(i)) continue
+        if (vals.some(isAmountStr)) { amountCol = i; metaCols.add(i); break }
+      }
+    }
+
+    // 姓名列：元数据列之后、且至少有一行有值的列（跳过全空列以保持对齐）
+    const metaMax = metaCols.size > 0 ? Math.max(...metaCols) : -1
+    const nameColIdx = []
+    for (let i = metaMax + 1; i < colCount; i++) {
+      if (colValues[i].length > 0) nameColIdx.push(i)
+    }
+
+    const autoDetected = typeCol >= 0 || paiweiCol >= 0 || amountCol >= 0
+
+    for (const line of lines) {
+      const cols = line.split('\t').map(c => c.trim())
+
+      let type, paiwei, amountStr, nameIdx
+      if (autoDetected) {
+        type = typeCol >= 0 ? (cols[typeCol] || '延生') : '延生'
+        paiwei = paiweiCol >= 0 ? (cols[paiweiCol] || '中') : '中'
+        amountStr = amountCol >= 0 ? (cols[amountCol] || '') : ''
+        nameIdx = nameColIdx
+      } else {
+        // 回退到固定列位置（原始格式）
+        if (cols.length < 4) continue
+        type = cols[2] || '延生'
+        paiwei = cols[3] || '中'
+        amountStr = cols[5] || ''
+        nameIdx = []
+        for (let i = 8; i < cols.length; i++) nameIdx.push(i)
+      }
+
       const yanwang = type === '往生' ? 1 : 0
-      const paiwei = cols[3] || '中'
       let paiweiType = '中牌'
       if (['大', '中', '小'].includes(paiwei)) {
         paiweiType = paiwei + '牌'
@@ -1245,22 +1323,27 @@ const parseBatchPaste = () => {
         paiweiType = paiwei
       }
 
-      const amountStr = cols[5] || ''
       let amount = 0
       if (amountStr && amountStr !== '长期' && !isNaN(parseFloat(amountStr))) {
         amount = parseFloat(amountStr)
       }
 
+      const nameCols = nameIdx.map(i => cols[i] || '')
       const row = {
         yanwang,
         yanwangLabel: type,
         paiwei_type: paiweiType,
         amount,
-        xm1: cols[8] || '',
-        xm2: cols[9] || '',
-        xm3: cols[10] || '',
-        xm4: cols[11] || '',
-        xm5: cols[12] || '',
+        xm1: nameCols[0] || '',
+        xm2: nameCols[1] || '',
+        xm3: nameCols[2] || '',
+        xm4: nameCols[3] || '',
+        xm5: nameCols[4] || '',
+        xm6: yanwang === 1 ? (nameCols[5] || '') : '',
+        xm7: yanwang === 1 ? (nameCols[6] || '') : '',
+        xm8: yanwang === 1 ? (nameCols[7] || '') : '',
+        xm9: yanwang === 1 ? (nameCols[8] || '') : '',
+        xm10: yanwang === 1 ? (nameCols[9] || '') : '',
         xm: yanwang === 0 ? '佛光注照' : '佛光接引'
       }
       preview.push(row)

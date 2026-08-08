@@ -286,6 +286,7 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
     yangshang_left_pct = layout.get('yangshangLeftPct', 2)
     yangshang_width_pct = layout.get('yangshangWidthPct', 20)
     yangshang_height_pct = layout.get('yangshangHeightPct', 55)
+    yangshang_rows = layout.get('yangshangRows', 1)
 
     seat_font_size_px = layout.get('seatFontSize', 24)
     seat_font_size = px_to_pt(seat_font_size_px)
@@ -405,9 +406,10 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
             ys_area_bottom = ys_area_top - ys_area_height
 
             # 阳上从右往左排列，与前端 flex row-reverse 一致
-            # 减去 spacing/2 匹配前端 flex item 的 margin-right
+            # 列宽按前端 line-height:1.2 计算（字形居中于 1.2em 列宽），修正打印整体偏右的问题
+            ys_col_w = yangshang_font_size * 1.2
             ys_area_right = ys_area_left + page_width * yangshang_width_pct / 100
-            ys_start_x = ys_area_right - yangshang_spacing / 2 - yangshang_font_size / 2
+            ys_start_x = ys_area_right - yangshang_spacing / 2 - ys_col_w / 2
 
             if auto_pad_yangshang:
                 parsed_ys = [split_name_suffix(n) for n in yangshang_names]
@@ -417,16 +419,22 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
                 # 保留原始模式：合并连续空白为单个全角空格，避免多个半角空格占多行导致后缀截断
                 ys_full_texts = [normalize_raw_name(n) for n in yangshang_names]
 
-            first_ys = True
+            ys_idx = 0
             for full_text in ys_full_texts:
-                if first_ys:
-                    ys_x = ys_start_x
-                    first_ys = False
+                if yangshang_rows == 2:
+                    pair_idx = ys_idx // 2
+                    ys_x = ys_start_x - pair_idx * (ys_col_w + yangshang_spacing)
+                    is_bottom = (ys_idx % 2 == 1)
                 else:
-                    ys_x = ys_start_x - yangshang_font_size - yangshang_spacing
+                    ys_x = ys_start_x - ys_idx * (ys_col_w + yangshang_spacing)
+                    is_bottom = False
                 if ys_x < ys_area_left:
                     break
-                ys_y = ys_area_top - yangshang_font_size * 0.75
+                if is_bottom:
+                    ys_n = len(full_text)
+                    ys_y = ys_area_bottom + (ys_n - 1) * yangshang_font_size * yangshang_char_spacing_ratio + yangshang_font_size * 0.25
+                else:
+                    ys_y = ys_area_top - yangshang_font_size * 0.75
                 # 不截断超出区域的字符,与前端 overflow:visible 一致 (WYSIWYG)
                 for ch in full_text:
                     if ch == '\u3000' or ch == ' ':
@@ -435,7 +443,7 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
                     c.setFont(font_name, yangshang_font_size)
                     c.drawCentredString(ys_x, ys_y, ch)
                     ys_y -= yangshang_font_size * yangshang_char_spacing_ratio
-                ys_start_x = ys_x
+                ys_idx += 1
 
         bottom_y = page_height * (1 - bottom_top_pct / 100) + print_offset_pt - seat_font_size * 0.75
         bottom_x = page_width * bottom_left_pct / 100
