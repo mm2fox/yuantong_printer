@@ -6,6 +6,7 @@
         <el-select v-model="selectedTemplateId" placeholder="选择打印模板" style="width: 250px">
           <el-option v-for="item in templateList" :key="item.id" :label="item.模板名称" :value="item.id" />
         </el-select>
+        <el-button type="warning" size="small" style="margin-left: 10px" @click="handleEditTemplate" :disabled="!selectedTemplateId">修改模板</el-button>
       </div>
       <div class="zoom-control">
         <el-button size="small" @click="showRuler = !showRuler" :type="showRuler ? 'warning' : ''">标尺</el-button>
@@ -41,12 +42,20 @@
             <img v-if="resolvedLayout.backgroundImage" :src="resolvedLayout.backgroundImage" class="preview-bg-image" :style="{ opacity: (resolvedLayout.backgroundOpacity || 30) / 100 }" />
             <div class="preview-content" :style="previewContentStyle">
               <div v-if="isWangSheng && resolvedDisplayItems.includes('yangshang')" class="preview-yangshang-area" :style="yangshangAreaStyle">
+                <span class="capacity-badge" :style="{ background: '#67c23a' }">横 {{ charCapacityOf(resolvedLayout, 'yangshang').horz }} × 竖 {{ charCapacityOf(resolvedLayout, 'yangshang').vert }} 字{{ resolvedLayout.yangshangRows === 2 ? ' / 行' : '' }}</span>
               <div v-for="(pair, pIdx) in yangshangPairs(alignedYangshangNames, resolvedLayout.yangshangRows)" :key="'ysp-'+pIdx" class="ys-pair" :style="ysPairStyle">
-                <div v-for="item in pair" :key="'ys-'+item.idx" :style="getYangshangItemStyle(item.idx)">{{ item.name }}</div>
+                <div v-for="item in pair" :key="'ys-'+item.idx" :style="(resolvedLayout.yangshangRows === 1 && resolvedLayout.yangshangAutoAdjust && resolvedLayout.yangshangVertAlign !== 'center') ? getYangshangFillItemStyle() : getYangshangItemStyle(item.idx)">
+                  <template v-if="resolvedLayout.yangshangRows === 1 && resolvedLayout.yangshangAutoAdjust && resolvedLayout.yangshangVertAlign !== 'center'"><span v-for="(ch, ci) in item.name" :key="ci" :style="{ fontSize: (resolvedLayout.yangshangFontSize || 18) + 'px', lineHeight: '1' }">{{ ch }}</span></template>
+                  <template v-else>{{ item.name }}</template>
+                </div>
               </div>
             </div>
               <div class="preview-names-area" :style="namesAreaStyle">
-                <div v-for="(name, idx) in alignedMainNames" :key="'n-'+idx" :style="nameItemStyle">{{ name }}</div>
+                <span class="capacity-badge" :style="{ background: '#f56c6c' }">横 {{ charCapacityOf(resolvedLayout, 'name').horz }} × 竖 {{ charCapacityOf(resolvedLayout, 'name').vert }} 字</span>
+                <div v-for="(name, idx) in alignedMainNames" :key="'n-'+idx" :style="(resolvedLayout.nameAutoAdjust && resolvedLayout.nameVertAlign !== 'center') ? nameFillItemStyle : nameItemStyle">
+                  <template v-if="resolvedLayout.nameAutoAdjust && resolvedLayout.nameVertAlign !== 'center'"><span v-for="(ch, ci) in name" :key="ci" :style="{ fontSize: (resolvedLayout.nameFontSize || 52) + 'px', lineHeight: '1' }">{{ ch }}</span></template>
+                  <template v-else>{{ name }}</template>
+                </div>
               </div>
               <div v-if="resolvedDisplayItems.includes('seat') || resolvedDisplayItems.includes('fahui_name') || resolvedDisplayItems.includes('shizhu_name')" class="preview-bottom" :style="bottomAreaStyle">
                 <span v-if="resolvedDisplayItems.includes('shizhu_name')">{{ record.施主姓名 }} </span>
@@ -70,6 +79,13 @@
       <el-button @click="dialogVisible = false">关闭</el-button>
       <el-button type="primary" @click="doPrint" :disabled="!selectedTemplateId">打印</el-button>
     </template>
+
+    <TemplateEditor
+      v-model:visible="editorVisible"
+      :template="currentTemplate"
+      :initial-sample-data="editorSampleData"
+      @saved="onEditorSaved"
+    />
   </el-dialog>
 </template>
 
@@ -78,6 +94,7 @@ import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { printerTemplateApi } from '@/api/printerTemplates'
 import { fahuiRecordApi } from '@/api/fahuiRecords'
+import TemplateEditor from '@/components/TemplateEditor.vue'
 
 const props = defineProps({
   visible: Boolean,
@@ -136,11 +153,12 @@ const defaultLayout = {
   printerMargin: 5,
   fontFamily: 'STXingkai',
   nameFontSize: 52, nameSpacing: 20,
+  nameCharSpacing: 1.3, nameVertAlign: 'top', nameAutoAdjust: false,
   autoPadNames: true,
   namesTopPct: 25, namesLeftPct: 10,
   namesWidthPct: 80, namesHeightPct: 55,
   yangshangFontSize: 18, yangshangSpacing: 5,
-  yangshangCharSpacing: 1.3,
+  yangshangCharSpacing: 1.3, yangshangVertAlign: 'top', yangshangAutoAdjust: false,
   autoPadYangshang: true,
   yangshangTopPct: 25, yangshangLeftPct: 2,
   yangshangWidthPct: 20, yangshangHeightPct: 55,
@@ -150,6 +168,37 @@ const defaultLayout = {
 const currentTemplate = computed(() => {
   return templateList.value.find(t => t.id === selectedTemplateId.value)
 })
+
+const editorVisible = ref(false)
+
+const editorSampleData = computed(() => {
+  const r = props.record || {}
+  return {
+    fahui_name: r.fahui_name || '示例法会',
+    seat: r.zuoweinum || r.座次 || '0001',
+    shizhu_name: r.施主姓名 || '张施主',
+    names_yansheng: [r.xm1, r.xm2, r.xm3, r.xm4, r.xm5].filter(Boolean),
+    names_wangsheng_jieyin: [r.xm1, r.xm2, r.xm3, r.xm4].filter(Boolean),
+    names_wangsheng_yangshang: [r.xm5, r.xm6, r.xm7, r.xm8, r.xm9, r.xm10].filter(Boolean)
+  }
+})
+
+const handleEditTemplate = () => {
+  if (!selectedTemplateId.value) {
+    ElMessage.warning('请先选择打印模板')
+    return
+  }
+  editorVisible.value = true
+}
+
+const onEditorSaved = () => {
+  const prevId = selectedTemplateId.value
+  fetchTemplateList().then(() => {
+    if (prevId && templateList.value.some(t => t.id === prevId)) {
+      selectedTemplateId.value = prevId
+    }
+  })
+}
 
 const templateConfig = computed(() => {
   const template = currentTemplate.value
@@ -270,6 +319,32 @@ const alignedYangshangNames = computed(() => {
   })
 })
 
+const PX_TO_MM = 0.2645833
+const charCapacityOf = (cfg, kind) => {
+  if (!cfg) return { vert: 0, horz: 0 }
+  const pageW = cfg.pageWidth || 210
+  const pageH = cfg.pageHeight || 297
+  if (kind === 'yangshang') {
+    const areaW = pageW * (cfg.yangshangWidthPct ?? 20) / 100
+    const areaH = pageH * (cfg.yangshangHeightPct ?? 55) / 100
+    const rows = cfg.yangshangRows === 2 ? 2 : 1
+    const fs = cfg.yangshangFontSize || 18
+    const vPitch = fs * PX_TO_MM * (cfg.yangshangCharSpacing || 1.3)
+    const hStep = (fs * 1.2 + (cfg.yangshangSpacing || 5)) * PX_TO_MM
+    const vert = vPitch > 0 ? Math.max(0, Math.floor((areaH / rows) / vPitch)) : 0
+    const horz = hStep > 0 ? Math.max(0, Math.floor(areaW / hStep)) : 0
+    return { vert, horz }
+  }
+  const areaW = pageW * (cfg.namesWidthPct ?? 80) / 100
+  const areaH = pageH * (cfg.namesHeightPct ?? 55) / 100
+  const fs = cfg.nameFontSize || 52
+  const vPitch = fs * PX_TO_MM * (cfg.nameCharSpacing || 1.3)
+  const hStep = (fs + (cfg.nameSpacing || 20)) * PX_TO_MM
+  const vert = vPitch > 0 ? Math.max(0, Math.floor(areaH / vPitch)) : 0
+  const horz = hStep > 0 ? Math.max(0, Math.floor(areaW / hStep)) : 0
+  return { vert, horz }
+}
+
 const namesAreaStyle = computed(() => {
   const l = resolvedLayout.value
   const offsetY = l.printOffsetY || 0
@@ -284,7 +359,7 @@ const namesAreaStyle = computed(() => {
     display: 'flex',
     flexDirection: 'row-reverse',
     justifyContent: 'center',
-    alignItems: 'flex-start',
+    alignItems: (l.nameAutoAdjust && l.nameVertAlign === 'center') ? 'center' : 'flex-start',
     boxSizing: 'border-box',
     border: '1px dashed #f56c6c'
   }
@@ -303,7 +378,7 @@ const yangshangAreaStyle = computed(() => {
     height: (l.yangshangHeightPct ?? 55) + '%',
     display: 'flex',
     flexDirection: 'row-reverse',
-    alignItems: 'flex-start',
+    alignItems: (l.yangshangAutoAdjust && l.yangshangRows === 1 && l.yangshangVertAlign === 'center') ? 'center' : 'flex-start',
     boxSizing: 'border-box',
     border: '1px dashed #67c23a'
   }
@@ -323,6 +398,21 @@ const nameItemStyle = computed(() => {
     fontSize: (l.nameFontSize || 52) + 'px',
     lineHeight: '1.2',
     letterSpacing: ((l.nameCharSpacing || 1.3) - 1.0) + 'em',
+    margin: '0 ' + ((l.nameSpacing || 20) / 2) + 'px',
+    whiteSpace: 'nowrap'
+  }
+})
+
+const nameFillItemStyle = computed(() => {
+  const l = resolvedLayout.value
+  return {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    height: '100%',
+    alignItems: 'center',
+    fontSize: (l.nameFontSize || 52) + 'px',
+    lineHeight: '1',
     margin: '0 ' + ((l.nameSpacing || 20) / 2) + 'px',
     whiteSpace: 'nowrap'
   }
@@ -363,6 +453,21 @@ const getYangshangItemStyle = (idx) => {
     fontSize: (l.yangshangFontSize || 18) + 'px',
     lineHeight: '1.2',
     letterSpacing: ((l.yangshangCharSpacing || 1.3) - 1.0) + 'em',
+    margin: '0',
+    whiteSpace: 'nowrap'
+  }
+}
+
+const getYangshangFillItemStyle = () => {
+  const l = resolvedLayout.value
+  return {
+    display: 'flex',
+    flexDirection: 'column',
+    justifyContent: 'space-between',
+    height: '100%',
+    alignItems: 'center',
+    fontSize: (l.yangshangFontSize || 18) + 'px',
+    lineHeight: '1',
     margin: '0',
     whiteSpace: 'nowrap'
   }
@@ -619,4 +724,5 @@ const doPrint = async () => {
 .preview-names-area { display: flex; flex-direction: row-reverse; justify-content: center; align-items: flex-start; }
 .preview-bottom { position: absolute; z-index: 1; }
 .preview-bottom span { display: block; }
+.capacity-badge { position: absolute; top: -20px; left: 0; z-index: 10; padding: 1px 6px; font-size: 12px; font-weight: 600; line-height: 1.5; color: #fff; border-radius: 3px; white-space: nowrap; pointer-events: none; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
 </style>

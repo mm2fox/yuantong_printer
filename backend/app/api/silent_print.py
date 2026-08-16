@@ -94,6 +94,26 @@ def get_font_name(requested_font):
 def px_to_pt(px):
     return px * 0.75
 
+def vert_start_step(vert_align, area_top, area_height, font_size, char_spacing_ratio, text_len):
+    """计算竖排字符的起始 baseline y 和向下步长。
+    vert_align: 'top'(靠上) / 'center'(居中) / 'fill'(撑满)
+    返回 (start_y, step)，step 为正数（向下推进时 y 减去 step）。
+    """
+    step = font_size * char_spacing_ratio
+    if vert_align == 'fill':
+        if text_len <= 1:
+            return area_top - area_height / 2 - font_size * 0.25, 0
+        fill_step = (area_height - font_size) / (text_len - 1)
+        if fill_step < font_size * 0.9:
+            return area_top - font_size * 0.75, step
+        return area_top - font_size * 0.75, fill_step
+    if vert_align == 'center':
+        text_h = (text_len - 1) * step + font_size
+        if text_h >= area_height:
+            return area_top - font_size * 0.75, step
+        return area_top - (area_height - text_h) / 2 - font_size * 0.75, step
+    return area_top - font_size * 0.75, step
+
 
 def resolve_image_path(url):
     if not url:
@@ -269,6 +289,8 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
     name_spacing_px = layout.get('nameSpacing', 20)
     name_spacing = px_to_pt(name_spacing_px)
     name_char_spacing_ratio = layout.get('nameCharSpacing', 1.3)
+    name_vert_align = layout.get('nameVertAlign', 'top')
+    name_auto_adjust = layout.get('nameAutoAdjust', False)
     auto_pad_names = layout.get('autoPadNames', True)
     auto_pad_yangshang = layout.get('autoPadYangshang', True)
 
@@ -282,6 +304,8 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
     yangshang_spacing_px = layout.get('yangshangSpacing', 5)
     yangshang_spacing = px_to_pt(yangshang_spacing_px)
     yangshang_char_spacing_ratio = layout.get('yangshangCharSpacing', 1.3)
+    yangshang_vert_align = layout.get('yangshangVertAlign', 'top')
+    yangshang_auto_adjust = layout.get('yangshangAutoAdjust', False)
     yangshang_top_pct = layout.get('yangshangTopPct', 25)
     yangshang_left_pct = layout.get('yangshangLeftPct', 2)
     yangshang_width_pct = layout.get('yangshangWidthPct', 20)
@@ -389,15 +413,16 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
 
             for i, full_text in enumerate(full_texts):
                 x = start_x + (name_count - 1 - i) * (name_font_size + actual_spacing)
-                y = area_top - name_font_size * 0.75
+                name_vert_mode = 'fill' if (name_auto_adjust and name_vert_align == 'top') else ('center' if name_auto_adjust else 'top')
+                y, vstep = vert_start_step(name_vert_mode, area_top, area_height, name_font_size, name_char_spacing_ratio, len(full_text))
                 # 不截断超出区域的字符,与前端 overflow:visible 一致 (WYSIWYG)
                 for ch in full_text:
                     if ch == '\u3000' or ch == ' ':
-                        y -= name_font_size * name_char_spacing_ratio
+                        y -= vstep
                         continue
                     c.setFont(font_name, name_font_size)
                     c.drawCentredString(x, y, ch)
-                    y -= name_font_size * name_char_spacing_ratio
+                    y -= vstep
 
         if is_wangsheng and yangshang_names and 'yangshang' in display_items:
             ys_area_top = page_height * (1 - yangshang_top_pct / 100) + print_offset_pt
@@ -431,18 +456,20 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
                 if ys_x < ys_area_left:
                     break
                 if is_bottom:
-                    ys_n = len(full_text)
-                    ys_y = ys_area_bottom + (ys_n - 1) * yangshang_font_size * yangshang_char_spacing_ratio + yangshang_font_size * 0.25
+                    ys_vstep = yangshang_font_size * yangshang_char_spacing_ratio
+                    ys_y = ys_area_bottom + (len(full_text) - 1) * ys_vstep + yangshang_font_size * 0.25
                 else:
-                    ys_y = ys_area_top - yangshang_font_size * 0.75
+                    ys_area_h = ys_area_height / 2 if yangshang_rows == 2 else ys_area_height
+                    ys_vert_mode = 'fill' if (yangshang_auto_adjust and yangshang_vert_align == 'top') else ('center' if yangshang_auto_adjust else 'top')
+                    ys_y, ys_vstep = vert_start_step(ys_vert_mode, ys_area_top, ys_area_h, yangshang_font_size, yangshang_char_spacing_ratio, len(full_text))
                 # 不截断超出区域的字符,与前端 overflow:visible 一致 (WYSIWYG)
                 for ch in full_text:
                     if ch == '\u3000' or ch == ' ':
-                        ys_y -= yangshang_font_size * yangshang_char_spacing_ratio
+                        ys_y -= ys_vstep
                         continue
                     c.setFont(font_name, yangshang_font_size)
                     c.drawCentredString(ys_x, ys_y, ch)
-                    ys_y -= yangshang_font_size * yangshang_char_spacing_ratio
+                    ys_y -= ys_vstep
                 ys_idx += 1
 
         bottom_y = page_height * (1 - bottom_top_pct / 100) + print_offset_pt - seat_font_size * 0.75
