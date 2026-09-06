@@ -9,6 +9,8 @@ import json
 import asyncio
 import shutil
 import subprocess
+import zipfile
+import base64
 from pathlib import Path
 import ctypes
 import tempfile
@@ -39,6 +41,42 @@ def get_data_path():
     if getattr(sys, 'frozen', False):
         return Path(sys.executable).parent
     return Path(__file__).parent
+
+def detect_running_from_zip():
+    """检测程序是否直接从 ZIP 压缩包内启动。
+
+    Windows 在 ZIP 内双击 exe 时，只会把 exe 解压到临时目录，
+    路径形如 ...\\Temp\\Temp1_xxx.zip\\program.exe，
+    路径中某一级目录名会以 ".zip" 结尾。
+    返回命中的路径字符串，未命中返回 None。
+    """
+    candidates = []
+    if getattr(sys, 'frozen', False):
+        candidates.append(sys.executable)
+        candidates.append(getattr(sys, '_MEIPASS', ''))
+    if sys.argv:
+        candidates.append(sys.argv[0])
+    try:
+        candidates.append(str(Path(__file__).resolve()))
+    except Exception:
+        pass
+    try:
+        candidates.append(str(get_data_path()))
+        candidates.append(str(get_base_path()))
+    except Exception:
+        pass
+
+    for p in candidates:
+        if not p:
+            continue
+        try:
+            abs_p = os.path.abspath(str(p))
+        except Exception:
+            abs_p = str(p)
+        for part in abs_p.split(os.sep):
+            if part.lower().endswith('.zip'):
+                return abs_p
+    return None
 
 def load_config():
     data_path = get_data_path()
@@ -586,6 +624,127 @@ def create_tray_icon(url, show_window_callback, root):
     )
     return icon
 
+APP_ICON_FINGERPRINT_B64 = "bw5HfPUnRa5d3qAngr++us5Dm6e4+V96OXegycXz23zhwhqP3/ERavCX604yq5TiJPDAxhF6Yo+anDapUtrwtyYYakIpDhTEc+KEo7cfBquegyPCWZ8KvHx3h6deN7Y+2UNmykDZc3wsZv2KJp8e9jzyUi9STNl0bo21CzpU40DiAs4yOqkxo+B5+cMefrhzDoVCOG2Fpbz+6za9laSZElJPUnR4D5YqcRm8AlM+b9uKQFBQISkaWVugHaDcFZ+6QgYkUW57MIgEQi6NrpIvMuKmTWlXB9od4zMLjWvOgxffCbR8xGUrHAc+6fD+R8KllyXsO5Ry8kTKpxfHHBx17D6o9PUat2yEE+PKbw8Jqy8yOpnx5kHPNZ+NabQC2/d0uHiZUS05fvxaQj0V"
+
+def _bytes_in_file(path, needle, chunk_size=2 * 1024 * 1024, overlap=512):
+    n = len(needle)
+    if n == 0:
+        return True
+    if n > chunk_size:
+        chunk_size = n + 1024
+    try:
+        with open(path, "rb") as f:
+            prev_tail = b""
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                if needle in (prev_tail + chunk):
+                    return True
+                if len(chunk) < chunk_size:
+                    break
+                prev_tail = chunk[-overlap:] if overlap > 0 else b""
+        return False
+    except Exception:
+        return False
+
+def validate_exe_identity(exe_path):
+    """校验 exe 是否为本系统合法程序。返回 (level, reason)。
+    level: 'ok' 全部通过；'warn' 硬性通过但图标指纹缺失；'fail' 硬性不通过。
+    """
+    try:
+        size = os.path.getsize(exe_path)
+    except Exception as e:
+        return ("fail", f"无法读取文件: {e}")
+    if size < 10 * 1024 * 1024:
+        return ("fail", f"文件大小仅 {size // 1024} KB，不是本系统程序（正常约 60MB）。")
+    try:
+        with open(exe_path, "rb") as f:
+            head = f.read(2)
+    except Exception as e:
+        return ("fail", f"读取文件失败: {e}")
+    if head != b"MZ":
+        return ("fail", "不是有效的 Windows 可执行文件（缺少 MZ 头）。")
+    mei_magic = b'MEI\014\013\012\013\016'
+    try:
+        with open(exe_path, "rb") as f:
+            f.seek(max(0, size - 65536))
+            tail = f.read()
+    except Exception:
+        tail = b""
+    if mei_magic not in tail:
+        return ("fail", "不是 PyInstaller 打包的程序，无法自动升级。")
+    try:
+        fingerprint = base64.b64decode(APP_ICON_FINGERPRINT_B64)
+    except Exception:
+        fingerprint = b""
+    if fingerprint and _bytes_in_file(exe_path, fingerprint):
+        return ("ok", "身份校验通过")
+    return ("warn", "未检测到本系统图标特征。这个文件可能不是缘通寺院信息管理系统，继续可能有风险。")
+
+def _cleanup_upgrade_extract(extract_dir):
+    try:
+        if extract_dir and os.path.isdir(extract_dir):
+            shutil.rmtree(extract_dir, ignore_errors=True)
+    except Exception:
+        pass
+
+def _ask_overwrite_options(parent, has_config, has_db, has_uploads):
+    """弹窗让用户选择是否覆盖 ZIP 内的附带文件。返回 dict(config/db/uploads) 或 None(取消)。"""
+    import tkinter as tk
+
+    dlg = tk.Toplevel(parent)
+    dlg.title("选择覆盖内容")
+    dlg.transient(parent)
+    dlg.grab_set()
+    dlg.resizable(False, False)
+
+    result = {"ok": False, "config": False, "db": False, "uploads": False}
+
+    tk.Label(
+        dlg,
+        text="ZIP 包含以下附带文件，是否覆盖当前对应文件？\n（默认不勾选，仅升级程序）",
+        justify="left",
+    ).pack(padx=12, pady=(10, 6))
+
+    cfg_var = tk.BooleanVar(value=False)
+    db_var = tk.BooleanVar(value=False)
+    up_var = tk.BooleanVar(value=False)
+
+    def add_row(has, label, var, warning=""):
+        if not has:
+            return
+        row = tk.Frame(dlg)
+        row.pack(fill="x", padx=12, pady=2)
+        tk.Checkbutton(row, text=label, variable=var).pack(side="left")
+        if warning:
+            tk.Label(row, text=warning, fg="#c0392b").pack(side="left", padx=8)
+
+    add_row(has_config, "覆盖 config.json（寺院配置/端口等）", cfg_var)
+    add_row(has_db, "覆盖数据库 temple.db", db_var, "（会丢失现有数据，回滚不可恢复！）")
+    add_row(has_uploads, "覆盖 uploads/（打印模板等上传文件）", up_var)
+
+    btns = tk.Frame(dlg)
+    btns.pack(pady=10)
+
+    def on_ok():
+        result["config"] = bool(cfg_var.get())
+        result["db"] = bool(db_var.get())
+        result["uploads"] = bool(up_var.get())
+        result["ok"] = True
+        dlg.destroy()
+
+    def on_cancel():
+        dlg.destroy()
+
+    tk.Button(btns, text="取消", width=8, command=on_cancel).pack(side="left", padx=8)
+    tk.Button(btns, text="确认", width=8, command=on_ok).pack(side="left", padx=8)
+    dlg.protocol("WM_DELETE_WINDOW", on_cancel)
+    parent.wait_window(dlg)
+    if not result["ok"]:
+        return None
+    return result
+
 def show_control_window(url):
     import tkinter as tk
     from tkinter import ttk
@@ -646,7 +805,7 @@ def show_control_window(url):
         src_path = filedialog.askopenfilename(
             title=f"选择新版 {exe_name}",
             initialdir=exe_dir,
-            filetypes=[("可执行文件", "*.exe"), ("所有文件", "*.*")],
+            filetypes=[("程序/压缩包", "*.exe *.zip"), ("可执行文件", "*.exe"), ("压缩包", "*.zip"), ("所有文件", "*.*")],
         )
         if not src_path:
             return
@@ -655,7 +814,107 @@ def show_control_window(url):
             messagebox.showwarning("升级", "选中的文件就是当前正在运行的程序，请选择新版本。")
             return
 
+        extract_dir = ""
+        ov_config = "0"
+        ov_db = "0"
+        ov_uploads = "0"
+
+        lower = src_path.lower()
+        if lower.endswith(".zip"):
+            extract_dir = os.path.join(exe_dir, "_upgrade_extract")
+            try:
+                if os.path.exists(extract_dir):
+                    shutil.rmtree(extract_dir, ignore_errors=True)
+                os.makedirs(extract_dir, exist_ok=True)
+                with zipfile.ZipFile(src_path, "r") as zf:
+                    zf.extractall(extract_dir)
+            except Exception as e:
+                messagebox.showerror("升级", f"解压 ZIP 失败: {e}")
+                _cleanup_upgrade_extract(extract_dir)
+                return
+
+            found_exes = []
+            for root_w, _dirs, files in os.walk(extract_dir):
+                for fn in files:
+                    if fn.lower().endswith(".exe"):
+                        found_exes.append(os.path.join(root_w, fn))
+            if not found_exes:
+                messagebox.showerror("升级", "ZIP 内未找到可执行文件（.exe）。")
+                _cleanup_upgrade_extract(extract_dir)
+                return
+
+            if len(found_exes) == 1:
+                chosen = found_exes[0]
+            else:
+                chosen = None
+                for p in found_exes:
+                    if os.path.basename(p) == exe_name:
+                        chosen = p
+                        break
+                if not chosen:
+                    for p in found_exes:
+                        if os.path.basename(p) == "缘通寺院信息管理系统.exe":
+                            chosen = p
+                            break
+                if not chosen:
+                    chosen = max(found_exes, key=lambda p: os.path.getsize(p))
+                if not messagebox.askyesno(
+                    "升级",
+                    f"ZIP 内找到 {len(found_exes)} 个 exe，已选中：\n{os.path.basename(chosen)}\n\n用这个进行升级吗？",
+                ):
+                    _cleanup_upgrade_extract(extract_dir)
+                    return
+            src_path = chosen
+
+            level, reason = validate_exe_identity(src_path)
+            if level == "fail":
+                messagebox.showerror("升级", f"文件校验失败：{reason}")
+                _cleanup_upgrade_extract(extract_dir)
+                return
+            if level == "warn":
+                if not messagebox.askyesno("升级警告", f"{reason}\n\n仍要继续升级吗？"):
+                    _cleanup_upgrade_extract(extract_dir)
+                    return
+
+            has_config = os.path.isfile(os.path.join(extract_dir, "config.json"))
+            has_db = os.path.isfile(os.path.join(extract_dir, "database", "temple.db"))
+            has_uploads = os.path.isdir(os.path.join(extract_dir, "uploads"))
+            if has_config or has_db or has_uploads:
+                sel = _ask_overwrite_options(root, has_config, has_db, has_uploads)
+                if sel is None:
+                    _cleanup_upgrade_extract(extract_dir)
+                    return
+                ov_config = "1" if sel["config"] else "0"
+                ov_db = "1" if sel["db"] else "0"
+                ov_uploads = "1" if sel["uploads"] else "0"
+        elif lower.endswith(".exe"):
+            level, reason = validate_exe_identity(src_path)
+            if level == "fail":
+                messagebox.showerror("升级", f"文件校验失败：{reason}")
+                return
+            if level == "warn":
+                if not messagebox.askyesno("升级警告", f"{reason}\n\n仍要继续升级吗？"):
+                    return
+        else:
+            messagebox.showerror("升级", "请选择 .exe 或 .zip 文件。")
+            return
+
         version_display = BUILD_VERSION or "未知"
+        if extract_dir:
+            parts = []
+            if ov_config == "1":
+                parts.append("config.json")
+            if ov_db == "1":
+                parts.append("数据库")
+            if ov_uploads == "1":
+                parts.append("uploads")
+            if parts:
+                extras_desc = "\n\n额外覆盖：" + "、".join(parts) + "\n（数据库覆盖不可随程序回滚恢复）"
+            else:
+                extras_desc = "\n\n仅升级程序，不覆盖其他文件。"
+        else:
+            extras_desc = ""
+        will_overwrite = ov_config == "1" or ov_db == "1" or ov_uploads == "1"
         if not messagebox.askyesno(
             "确认升级",
             f"当前版本: {version_display}\n\n"
@@ -664,10 +923,12 @@ def show_control_window(url):
             "2. 关闭当前程序\n"
             "3. 备份旧程序并替换为新版本\n"
             "4. 启动新版本验证\n"
-            "5. 新版本启动失败时自动回滚到旧版本\n\n"
-            "数据库和上传文件不会被覆盖，升级后数据保留。\n\n"
-            "确认要升级吗？",
+            "5. 新版本启动失败时自动回滚到旧版本\n"
+            + ("数据库和上传文件不会被覆盖，升级后数据保留。" if not will_overwrite else "按你的选择，部分附带文件也会被覆盖。")
+            + extras_desc + "\n\n确认要升级吗？",
         ):
+            if extract_dir:
+                _cleanup_upgrade_extract(extract_dir)
             return
 
         ps1_path = os.path.join(exe_dir, "_upgrade.ps1")
@@ -675,6 +936,10 @@ def show_control_window(url):
 $exeDir = '__EXE_DIR__'
 $exeName = '__EXE_NAME__'
 $srcPath = '__SRC_PATH__'
+$extractDir = '__EXTRACT_DIR__'
+$ovConfig = '__OV_CONFIG__'
+$ovDb = '__OV_DB__'
+$ovUploads = '__OV_UPLOADS__'
 $exeFullName = Join-Path $exeDir $exeName
 $procName = [System.IO.Path]::GetFileNameWithoutExtension($exeName)
 
@@ -712,8 +977,33 @@ try {
         Write-Host "[ERROR] 回滚也失败: $($_.Exception.Message)"
     }
     Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+    if ($extractDir -ne '') { Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue }
     Read-Host '按回车退出'
     exit 1
+}
+
+Write-Host '[3.5/5] 复制选中的附带文件...'
+if ($ovConfig -eq '1' -and $extractDir -ne '') {
+    try {
+        $cfgSrc = Join-Path $extractDir 'config.json'
+        if (Test-Path -LiteralPath $cfgSrc) { Copy-Item -LiteralPath $cfgSrc -Destination (Join-Path $exeDir 'config.json') -Force }
+    } catch { Write-Host "[WARN] 覆盖 config.json 失败: $($_.Exception.Message)" }
+}
+if ($ovDb -eq '1' -and $extractDir -ne '') {
+    try {
+        $dbSrc = Join-Path $extractDir 'database\temple.db'
+        if (Test-Path -LiteralPath $dbSrc) {
+            $dbDstDir = Join-Path $exeDir 'database'
+            if (-not (Test-Path -LiteralPath $dbDstDir)) { New-Item -ItemType Directory -Path $dbDstDir -Force | Out-Null }
+            Copy-Item -LiteralPath $dbSrc -Destination (Join-Path $dbDstDir 'temple.db') -Force
+        }
+    } catch { Write-Host "[WARN] 覆盖数据库失败: $($_.Exception.Message)" }
+}
+if ($ovUploads -eq '1' -and $extractDir -ne '') {
+    try {
+        $upSrc = Join-Path $extractDir 'uploads'
+        if (Test-Path -LiteralPath $upSrc) { Copy-Item -LiteralPath $upSrc -Destination (Join-Path $exeDir 'uploads') -Force -Recurse }
+    } catch { Write-Host "[WARN] 覆盖 uploads 失败: $($_.Exception.Message)" }
 }
 
 try { Unblock-File -Path $exeFullName -ErrorAction SilentlyContinue } catch {}
@@ -748,6 +1038,7 @@ if (-not $ok) {
     }
     Remove-Item -LiteralPath (Join-Path $exeDir "$exeName.failed") -Force -ErrorAction SilentlyContinue
     Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+    if ($extractDir -ne '') { Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue }
     Read-Host '按回车退出'
     exit 1
 }
@@ -755,12 +1046,17 @@ if (-not $ok) {
 Write-Host '升级成功！'
 Remove-Item -LiteralPath (Join-Path $exeDir "$exeName.bak") -Force -ErrorAction SilentlyContinue
 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
+if ($extractDir -ne '') { Remove-Item -LiteralPath $extractDir -Recurse -Force -ErrorAction SilentlyContinue }
 exit 0
 '''
         ps1_content = (ps1_template
                         .replace('__EXE_DIR__', exe_dir)
                         .replace('__EXE_NAME__', exe_name)
-                        .replace('__SRC_PATH__', src_path))
+                        .replace('__SRC_PATH__', src_path)
+                        .replace('__EXTRACT_DIR__', extract_dir)
+                        .replace('__OV_CONFIG__', ov_config)
+                        .replace('__OV_DB__', ov_db)
+                        .replace('__OV_UPLOADS__', ov_uploads))
         try:
             with open(ps1_path, "w", encoding="utf-8-sig") as f:
                 f.write(ps1_content)
@@ -1080,6 +1376,21 @@ def sync_with_system_dir():
 
 if __name__ == "__main__":
     try:
+        # 启动前先检测是否直接从 ZIP 压缩包内运行：
+        # Windows 在 ZIP 内双击 exe 只会解压 exe 本身，config.json / database / uploads
+        # 等不会被解压，会导致数据无法保存、配置丢失，必须拒绝运行。
+        zip_hit = detect_running_from_zip()
+        if zip_hit:
+            log_message(f"检测到从 ZIP 压缩包内启动，拒绝运行: {zip_hit}")
+            msg = (
+                "检测到程序正在从 ZIP 压缩包中直接运行。\n\n"
+                f"检测路径：{zip_hit}\n\n"
+                "请先将 ZIP 压缩包完整解压到一个文件夹中，然后再运行程序。\n"
+                "直接在 ZIP 中运行会导致数据库无法保存、配置丢失等问题。"
+            )
+            ctypes.windll.user32.MessageBoxW(0, msg, "运行错误", 0x10)
+            sys.exit(1)
+
         MUTEX_NAME = "Global\\TempleManagement_SingleInstance"
         mutex = ctypes.windll.kernel32.CreateMutexW(None, True, MUTEX_NAME)
         last_error = ctypes.windll.kernel32.GetLastError()
