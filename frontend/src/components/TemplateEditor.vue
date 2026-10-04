@@ -231,16 +231,16 @@
               </div>
               <div class="slider-item">
                 <span class="slider-label">纵向间距</span>
-                <el-slider v-model="layoutConfig.yangshangCharSpacing" :min="1.0" :max="3.0" :step="0.1" :show-input="true" :show-input-controls="false" input-size="small" :disabled="layoutConfig.yangshangAutoAdjust || layoutConfig.yangshangRows === 2" />
+                <el-slider v-model="layoutConfig.yangshangCharSpacing" :min="1.0" :max="3.0" :step="0.1" :show-input="true" :show-input-controls="false" input-size="small" :disabled="layoutConfig.yangshangAutoAdjust || layoutConfig.yangshangRows >= 2" />
               </div>
             </div>
             <el-form-item label="纵向对齐">
-              <el-radio-group v-model="layoutConfig.yangshangVertAlign" size="small" :disabled="!layoutConfig.yangshangAutoAdjust || layoutConfig.yangshangRows === 2">
+              <el-radio-group v-model="layoutConfig.yangshangVertAlign" size="small" :disabled="!layoutConfig.yangshangAutoAdjust || layoutConfig.yangshangRows >= 2">
                 <el-radio-button label="top">靠上</el-radio-button>
                 <el-radio-button label="center">居中</el-radio-button>
               </el-radio-group>
-              <el-switch v-model="layoutConfig.yangshangAutoAdjust" active-text="自动间距" style="margin-left: 12px;" :disabled="layoutConfig.yangshangRows === 2" />
-              <span style="margin-left: 8px; color: #909399; font-size: 12px;">{{ layoutConfig.yangshangRows === 2 ? '两排模式固定靠上/靠下' : (layoutConfig.yangshangAutoAdjust ? '靠上=撑满区域，居中=居中排列' : '手动设置纵向间距，与之前一致') }}</span>
+              <el-switch v-model="layoutConfig.yangshangAutoAdjust" active-text="自动间距" style="margin-left: 12px;" :disabled="layoutConfig.yangshangRows >= 2" />
+              <span style="margin-left: 8px; color: #909399; font-size: 12px;">{{ layoutConfig.yangshangRows >= 2 ? layoutConfig.yangshangRows + '排模式顶排撑满、其余靠子区域底部' : (layoutConfig.yangshangAutoAdjust ? '靠上=撑满区域，居中=居中排列' : '手动设置纵向间距，与之前一致') }}</span>
             </el-form-item>
             <el-form-item label="自动补齐">
               <el-switch v-model="layoutConfig.autoPadYangshang" active-text="对齐补空格" inactive-text="保留原始" />
@@ -250,8 +250,9 @@
               <el-radio-group v-model="layoutConfig.yangshangRows">
                 <el-radio :label="1">一排</el-radio>
                 <el-radio :label="2">两排（上下错开）</el-radio>
+                <el-radio :label="3">三排（上中下错开）</el-radio>
               </el-radio-group>
-              <span style="margin-left: 8px; color: #909399; font-size: 12px;">两排时第1/3/5…个在上排，第2/4/6…个在下排</span>
+              <span style="margin-left: 8px; color: #909399; font-size: 12px;">多排时按顺序从上到下错开：第1/(N+1)/(2N+1)…个在上排</span>
             </el-form-item>
             <el-row :gutter="16">
               <el-col :span="12">
@@ -332,9 +333,9 @@
               <div class="small-paper-indicator" :style="tlSmallPaperIndicatorStyle"></div>
               <div class="preview-scaler" :style="tlPreviewScalerStyle">
                 <img v-if="layoutConfig.backgroundImage" :src="layoutConfig.backgroundImage" class="preview-bg-image" :style="{ opacity: layoutConfig.backgroundOpacity / 100 }" />
-                <div class="preview-content" :style="{ fontFamily: layoutConfig.fontFamily }">
+                <div class="preview-content" ref="previewContentRef" :style="{ fontFamily: layoutConfig.fontFamily }">
                   <div v-if="isWangSheng && displayItems.includes('yangshang')" class="preview-yangshang-area" :style="yangshangAreaStyle">
-                    <span class="capacity-badge" :style="{ background: '#67c23a' }">横 {{ charCapacityOf(layoutConfig, 'yangshang').horz }} × 竖 {{ charCapacityOf(layoutConfig, 'yangshang').vert }} 字{{ layoutConfig.yangshangRows === 2 ? ' / 行' : '' }}</span>
+                    <span class="capacity-badge" :style="{ background: '#67c23a' }" @mousedown.stop.prevent="startDrag($event, 'yangshang', 'move')">横 {{ charCapacityOf(layoutConfig, 'yangshang').horz }} × 竖 {{ charCapacityOf(layoutConfig, 'yangshang').vert }} 字{{ layoutConfig.yangshangRows >= 2 ? ' / 行' : '' }}</span>
                   <div v-for="(pair, pIdx) in yangshangPairs(alignedSampleYangshangNames, layoutConfig.yangshangRows)" :key="'ysp-'+pIdx" class="ys-pair" :style="ysPairStyle(layoutConfig)">
                     <div v-for="item in pair" :key="'ys-'+item.idx" :style="(layoutConfig.yangshangRows === 1 && layoutConfig.yangshangAutoAdjust && layoutConfig.yangshangVertAlign !== 'center') ? getYangshangFillItemStyle(layoutConfig) : getYangshangItemStyle(layoutConfig, item.idx)" class="editable-cell" contenteditable="plaintext-only" @focus="onSampleFocus($event, item.idx, 'yangshang')" @blur="onSampleBlur($event, item.idx, 'yangshang')">
                       <template v-if="layoutConfig.yangshangRows === 1 && layoutConfig.yangshangAutoAdjust && layoutConfig.yangshangVertAlign !== 'center'"><span v-for="(ch, ci) in item.name" :key="ci" :style="{ fontSize: layoutConfig.yangshangFontSize + 'px', lineHeight: '1' }">{{ ch }}</span></template>
@@ -342,14 +343,16 @@
                     </div>
                   </div>
                   <div class="add-name-btn" :style="{ writingMode: 'vertical-rl', fontSize: layoutConfig.yangshangFontSize + 'px', lineHeight: '1.2', color: '#c0c4cc', cursor: 'pointer', border: '1px dashed #dcdfe6', padding: '2px 4px' }" @click="addSampleName('yangshang')">+ 添加</div>
+                  <div class="resize-handle" @mousedown.stop.prevent="startDrag($event, 'yangshang', 'resize')"></div>
                 </div>
                   <div class="preview-names-area" :style="namesAreaStyle">
-                    <span class="capacity-badge" :style="{ background: '#f56c6c' }">横 {{ charCapacityOf(layoutConfig, 'name').horz }} × 竖 {{ charCapacityOf(layoutConfig, 'name').vert }} 字</span>
+                    <span class="capacity-badge" :style="{ background: '#f56c6c' }" @mousedown.stop.prevent="startDrag($event, 'name', 'move')">横 {{ charCapacityOf(layoutConfig, 'name').horz }} × 竖 {{ charCapacityOf(layoutConfig, 'name').vert }} 字</span>
                     <div v-for="(name, idx) in alignedSampleNames" :key="'n-'+idx" :style="(layoutConfig.nameAutoAdjust && layoutConfig.nameVertAlign !== 'center') ? getNameFillItemStyle(layoutConfig) : nameItemStyle" class="editable-cell" contenteditable="plaintext-only" @focus="onSampleFocus($event, idx, 'name')" @blur="onSampleBlur($event, idx, 'name')">
                       <template v-if="layoutConfig.nameAutoAdjust && layoutConfig.nameVertAlign !== 'center'"><span v-for="(ch, ci) in name" :key="ci" :style="{ fontSize: layoutConfig.nameFontSize + 'px', lineHeight: '1' }">{{ ch }}</span></template>
                       <template v-else>{{ name }}</template>
                     </div>
                     <div class="add-name-btn" :style="nameItemStyle" style="position: absolute; left: 0; top: 0; z-index: 5; color: #c0c4cc; cursor: pointer; border: 1px dashed #dcdfe6; padding: 2px 4px;" @click="addSampleName('name')">+ 添加</div>
+                    <div class="resize-handle" @mousedown.stop.prevent="startDrag($event, 'name', 'resize')"></div>
                   </div>
                   <div v-if="displayItems.includes('seat') || displayItems.includes('fahui_name') || displayItems.includes('shizhu_name')" class="preview-bottom" :style="bottomAreaStyle">
                     <span v-if="displayItems.includes('shizhu_name')" class="editable-cell" contenteditable="plaintext-only" @blur="onBottomBlur($event, 'shizhu_name')">{{ sampleData.shizhu_name }} </span>
@@ -451,7 +454,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, watch } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { ElMessage } from 'element-plus'
 import { printerTemplateApi } from '@/api/printerTemplates'
 import { scannerApi } from '@/api/scanner'
@@ -671,7 +674,7 @@ const charCapacityOf = (cfg, kind) => {
   if (kind === 'yangshang') {
     const areaW = pageW * (cfg.yangshangWidthPct ?? 20) / 100
     const areaH = pageH * (cfg.yangshangHeightPct ?? 55) / 100
-    const rows = cfg.yangshangRows === 2 ? 2 : 1
+    const rows = (cfg.yangshangRows >= 1 && cfg.yangshangRows <= 3) ? cfg.yangshangRows : 1
     const fs = cfg.yangshangFontSize || 18
     const vPitch = fs * PX_TO_MM * (cfg.yangshangCharSpacing || 1.3)
     const hStep = (fs * 1.2 + (cfg.yangshangSpacing || 5)) * PX_TO_MM
@@ -704,7 +707,8 @@ const getNamesAreaStyle = (cfg) => {
     justifyContent: 'center',
     alignItems: (cfg.nameAutoAdjust && cfg.nameVertAlign === 'center') ? 'center' : 'flex-start',
     boxSizing: 'border-box',
-    border: '1px dashed #f56c6c'
+    border: '1px dashed #f56c6c',
+    zIndex: 1
   }
 }
 
@@ -722,7 +726,8 @@ const getYangshangAreaStyle = (cfg) => {
     flexDirection: 'row-reverse',
     alignItems: (cfg.yangshangAutoAdjust && cfg.yangshangRows === 1 && cfg.yangshangVertAlign === 'center') ? 'center' : 'flex-start',
     boxSizing: 'border-box',
-    border: '1px dashed #67c23a'
+    border: '1px dashed #67c23a',
+    zIndex: 2
   }
 }
 
@@ -764,14 +769,16 @@ const getBottomAreaStyle = (cfg) => {
 
 const yangshangPairs = (names, rows) => {
   const arr = names || []
-  if ((rows || 1) === 1) {
+  const r = (rows >= 1 && rows <= 3) ? rows : 1
+  if (r === 1) {
     return arr.map((name, i) => [{ name, idx: i }])
   }
   const pairs = []
-  for (let i = 0; i < arr.length; i += 2) {
+  for (let i = 0; i < arr.length; i += r) {
     const pair = []
-    if (arr[i] !== undefined) pair.push({ name: arr[i], idx: i })
-    if (arr[i + 1] !== undefined) pair.push({ name: arr[i + 1], idx: i + 1 })
+    for (let j = 0; j < r; j++) {
+      if (arr[i + j] !== undefined) pair.push({ name: arr[i + j], idx: i + j })
+    }
     pairs.push(pair)
   }
   return pairs
@@ -780,7 +787,7 @@ const yangshangPairs = (names, rows) => {
 const ysPairStyle = (cfg) => ({
   display: 'flex',
   flexDirection: 'column',
-  justifyContent: ((cfg.yangshangRows || 1) === 2) ? 'space-between' : 'flex-start',
+  justifyContent: ((cfg.yangshangRows || 1) >= 2) ? 'space-between' : 'flex-start',
   height: '100%',
   alignItems: 'center',
   margin: '0 ' + ((cfg.yangshangSpacing || 5) / 2) + 'px',
@@ -812,6 +819,72 @@ const namesAreaStyle = computed(() => getNamesAreaStyle(layoutConfig))
 const yangshangAreaStyle = computed(() => getYangshangAreaStyle(layoutConfig))
 const nameItemStyle = computed(() => getNameItemStyle(layoutConfig))
 const bottomAreaStyle = computed(() => getBottomAreaStyle(layoutConfig))
+
+const previewContentRef = ref(null)
+
+const AREA_FIELDS = {
+  name:      { top: 'namesTopPct',      left: 'namesLeftPct',      width: 'namesWidthPct',      height: 'namesHeightPct' },
+  yangshang: { top: 'yangshangTopPct',  left: 'yangshangLeftPct',  width: 'yangshangWidthPct',  height: 'yangshangHeightPct' }
+}
+
+const AREA_CONSTRAINTS = {
+  topMin: 0, topMax: 80,
+  leftMin: 0, leftMax: 80,
+  widthMin: 10, widthMax: 100,
+  heightMin: 10, heightMax: 100
+}
+
+const dragState = ref(null)
+
+const startDrag = (e, area, type) => {
+  if (layoutConfig.flipH || layoutConfig.flipV) {
+    ElMessage.warning('翻转模式下不支持拖拽，请先关闭翻转')
+    return
+  }
+  const rect = previewContentRef.value?.getBoundingClientRect()
+  if (!rect || rect.width === 0 || rect.height === 0) return
+  const fields = AREA_FIELDS[area]
+  dragState.value = {
+    area, type,
+    startX: e.clientX,
+    startY: e.clientY,
+    startValues: {
+      top:    layoutConfig[fields.top],
+      left:   layoutConfig[fields.left],
+      width:  layoutConfig[fields.width],
+      height: layoutConfig[fields.height]
+    },
+    fields,
+    contentRect: rect
+  }
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+const onDragMove = (e) => {
+  if (!dragState.value) return
+  const ds = dragState.value
+  const dxPct = (e.clientX - ds.startX) / ds.contentRect.width * 100
+  const dyPct = (e.clientY - ds.startY) / ds.contentRect.height * 100
+  const round = v => Math.round(v * 10) / 10
+  const C = AREA_CONSTRAINTS
+  const sv = ds.startValues
+  if (ds.type === 'move') {
+    const maxTop  = Math.min(C.topMax,  100 - sv.height)
+    const maxLeft = Math.min(C.leftMax, 100 - sv.width)
+    layoutConfig[ds.fields.top]  = round(Math.max(C.topMin,  Math.min(sv.top  + dyPct, maxTop)))
+    layoutConfig[ds.fields.left] = round(Math.max(C.leftMin, Math.min(sv.left + dxPct, maxLeft)))
+  } else if (ds.type === 'resize') {
+    const maxWidth  = Math.min(C.widthMax,  100 - sv.left)
+    const maxHeight = Math.min(C.heightMax, 100 - sv.top)
+    layoutConfig[ds.fields.width]  = round(Math.max(C.widthMin,  Math.min(sv.width  + dxPct, maxWidth)))
+    layoutConfig[ds.fields.height] = round(Math.max(C.heightMin, Math.min(sv.height + dyPct, maxHeight)))
+  }
+}
+
+const onDragEnd = () => {
+  if (dragState.value) dragState.value = null
+}
 
 const CAL_KEY_X = 'print_cal_scale_x'
 const CAL_KEY_Y = 'print_cal_scale_y'
@@ -1067,6 +1140,15 @@ watch(() => props.visible, (val) => {
   if (val) initEditor()
 }, { immediate: true })
 
+onMounted(() => {
+  document.addEventListener('mousemove', onDragMove)
+  document.addEventListener('mouseup', onDragEnd)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('mousemove', onDragMove)
+  document.removeEventListener('mouseup', onDragEnd)
+})
+
 const handleImageChange = async (uploadFile) => {
   try {
     const res = await printerTemplateApi.uploadImage(uploadFile.raw)
@@ -1278,7 +1360,11 @@ const handleSubmit = async () => {
 .preview-names-area { display: flex; flex-direction: row-reverse; justify-content: center; align-items: flex-start; }
 .preview-bottom { position: absolute; z-index: 1; }
 .preview-bottom span { display: block; }
-.capacity-badge { position: absolute; top: -20px; left: 0; z-index: 10; padding: 1px 6px; font-size: 12px; font-weight: 600; line-height: 1.5; color: #fff; border-radius: 3px; white-space: nowrap; pointer-events: none; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+.capacity-badge { position: absolute; top: -20px; left: 0; z-index: 10; padding: 1px 6px; font-size: 12px; font-weight: 600; line-height: 1.5; color: #fff; border-radius: 3px; white-space: nowrap; pointer-events: auto; cursor: move; user-select: none; font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif; }
+.resize-handle { position: absolute; right: -5px; bottom: -5px; width: 12px; height: 12px; background: #fff; border: 2px solid #f56c6c; border-radius: 50%; cursor: nwse-resize; z-index: 20; pointer-events: auto; box-sizing: border-box; opacity: 0; transition: opacity 0.15s; }
+.preview-yangshang-area .resize-handle { border-color: #67c23a; }
+.preview-names-area:hover .resize-handle,
+.preview-yangshang-area:hover .resize-handle { opacity: 1; }
 .editable-cell { outline: none; border-radius: 2px; transition: background 0.15s; min-width: 1em; min-height: 1em; }
 .editable-cell:hover { background: rgba(64, 158, 255, 0.12); box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.3); }
 .editable-cell:focus { background: rgba(64, 158, 255, 0.18); box-shadow: 0 0 0 1px rgba(64, 158, 255, 0.6); }

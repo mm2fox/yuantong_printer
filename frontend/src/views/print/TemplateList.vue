@@ -4,8 +4,13 @@
       <template #header>
         <div class="card-header">
           <span>打印模板管理</span>
-          <el-button type="primary" @click="handleAdd">新增模板</el-button>
+          <div>
+            <el-button type="success" @click="handleImportClick" :loading="importLoading">导入模板</el-button>
+            <el-button type="warning" @click="handleExportAll" :loading="exportAllLoading">导出全部</el-button>
+            <el-button type="primary" @click="handleAdd">新增模板</el-button>
+          </div>
         </div>
+        <input ref="importInputRef" type="file" accept=".json" style="display:none" @change="handleImportFile" />
       </template>
       <el-table :data="tableData" v-loading="loading" stripe>
         <el-table-column prop="模板名称" label="模板名称" min-width="150">
@@ -26,12 +31,13 @@
         <el-table-column prop="备注" label="备注" min-width="150">
           <template #default="{ row }">{{ row.备注 || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="300" fixed="right">
+        <el-table-column label="操作" width="360" fixed="right">
           <template #default="{ row }">
             <el-button type="primary" link @click="handleEdit(row)" :disabled="row.是否默认 === 1">编辑</el-button>
             <el-button type="success" link @click="handlePreviewFromList(row)">预览</el-button>
             <el-button type="warning" link @click="handleSetDefault(row)" :disabled="row.是否默认 === 1">设为默认</el-button>
             <el-button type="info" link @click="handleCopy(row)">复制</el-button>
+            <el-button type="success" link @click="handleExport(row)">导出</el-button>
             <el-button type="danger" link @click="handleDelete(row)" :disabled="row.是否默认 === 1">删除</el-button>
           </template>
         </el-table-column>
@@ -64,7 +70,7 @@
               <img v-if="previewLayoutConfig.backgroundImage" :src="previewLayoutConfig.backgroundImage" class="preview-bg-image" :style="{ opacity: previewLayoutConfig.backgroundOpacity / 100 }" />
               <div class="preview-content" :style="{ fontFamily: previewLayoutConfig.fontFamily }">
                 <div v-if="previewIsWangSheng && previewDisplayItems.includes('yangshang')" class="preview-yangshang-area" :style="getYangshangAreaStyle(previewLayoutConfig)">
-                  <span class="capacity-badge" :style="{ background: '#67c23a' }">横 {{ charCapacityOf(previewLayoutConfig, 'yangshang').horz }} × 竖 {{ charCapacityOf(previewLayoutConfig, 'yangshang').vert }} 字{{ previewLayoutConfig.yangshangRows === 2 ? ' / 行' : '' }}</span>
+                  <span class="capacity-badge" :style="{ background: '#67c23a' }">横 {{ charCapacityOf(previewLayoutConfig, 'yangshang').horz }} × 竖 {{ charCapacityOf(previewLayoutConfig, 'yangshang').vert }} 字{{ previewLayoutConfig.yangshangRows >= 2 ? ' / 行' : '' }}</span>
                 <div v-for="(pair, pIdx) in yangshangPairs(alignedPreviewYangshangNames, previewLayoutConfig.yangshangRows)" :key="'ysp-'+pIdx" class="ys-pair" :style="ysPairStyle(previewLayoutConfig)">
                   <div v-for="item in pair" :key="'ys-'+item.idx" :style="(previewLayoutConfig.yangshangRows === 1 && previewLayoutConfig.yangshangAutoAdjust && previewLayoutConfig.yangshangVertAlign !== 'center') ? getYangshangFillItemStyle(previewLayoutConfig) : getYangshangItemStyle(previewLayoutConfig, item.idx)">
                     <template v-if="previewLayoutConfig.yangshangRows === 1 && previewLayoutConfig.yangshangAutoAdjust && previewLayoutConfig.yangshangVertAlign !== 'center'"><span v-for="(ch, ci) in item.name" :key="ci" :style="{ fontSize: previewLayoutConfig.yangshangFontSize + 'px', lineHeight: '1' }">{{ ch }}</span></template>
@@ -108,6 +114,87 @@ import TemplateEditor from '@/components/TemplateEditor.vue'
 
 const loading = ref(false)
 const tableData = ref([])
+
+// 模板导入/导出相关状态
+const importInputRef = ref(null)
+const importLoading = ref(false)
+const exportAllLoading = ref(false)
+
+// 通用: 触发浏览器下载 Blob 文件
+const downloadBlob = (blob, filename) => {
+  const url = window.URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  window.URL.revokeObjectURL(url)
+}
+
+// 文件名安全化 (仅保留中文/字母/数字/下划线)
+const safeFilename = (name) => {
+  return (name || 'template').replace(/[^\w\u4e00-\u9fa5]/g, '_')
+}
+
+// 导出单个模板
+const handleExport = async (row) => {
+  try {
+    const blob = await printerTemplateApi.exportOne(row.id)
+    const ts = new Date()
+    const stamp = `${ts.getFullYear()}${String(ts.getMonth()+1).padStart(2,'0')}${String(ts.getDate()).padStart(2,'0')}_${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}${String(ts.getSeconds()).padStart(2,'0')}`
+    downloadBlob(blob, `打印模板_${safeFilename(row.模板名称)}_${stamp}.json`)
+    ElMessage.success('导出成功')
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  }
+}
+
+// 导出全部模板
+const handleExportAll = async () => {
+  if (tableData.value.length === 0) {
+    ElMessage.warning('当前没有可导出的模板')
+    return
+  }
+  exportAllLoading.value = true
+  try {
+    const blob = await printerTemplateApi.exportAll()
+    const ts = new Date()
+    const stamp = `${ts.getFullYear()}${String(ts.getMonth()+1).padStart(2,'0')}${String(ts.getDate()).padStart(2,'0')}_${String(ts.getHours()).padStart(2,'0')}${String(ts.getMinutes()).padStart(2,'0')}${String(ts.getSeconds()).padStart(2,'0')}`
+    downloadBlob(blob, `打印模板_全部导出_${stamp}.json`)
+    ElMessage.success(`已导出 ${tableData.value.length} 个模板`)
+  } catch (error) {
+    console.error('导出失败:', error)
+    ElMessage.error('导出失败')
+  } finally {
+    exportAllLoading.value = false
+  }
+}
+
+// 点击导入按钮 -> 触发隐藏的 file input
+const handleImportClick = () => {
+  importInputRef.value.value = ''
+  importInputRef.value.click()
+}
+
+// 选择文件后调用导入接口
+const handleImportFile = async (event) => {
+  const file = event.target.files?.[0]
+  if (!file) return
+  importLoading.value = true
+  try {
+    const result = await printerTemplateApi.importTemplates(file)
+    ElMessage.success(result.message || `导入成功 ${result.imported_count} 个模板`)
+    fetchData()
+  } catch (error) {
+    // blob 响应的错误体可能需要单独解析,但这里错误拦截器已处理 detail 提示
+    console.error('导入失败:', error)
+  } finally {
+    importLoading.value = false
+  }
+}
+
 const previewVisible = ref(false)
 
 const editorVisible = ref(false)
@@ -280,7 +367,7 @@ const charCapacityOf = (cfg, kind) => {
   if (kind === 'yangshang') {
     const areaW = pageW * (cfg.yangshangWidthPct ?? 20) / 100
     const areaH = pageH * (cfg.yangshangHeightPct ?? 55) / 100
-    const rows = cfg.yangshangRows === 2 ? 2 : 1
+    const rows = (cfg.yangshangRows >= 1 && cfg.yangshangRows <= 3) ? cfg.yangshangRows : 1
     const fs = cfg.yangshangFontSize || 18
     const vPitch = fs * PX_TO_MM * (cfg.yangshangCharSpacing || 1.3)
     const hStep = (fs * 1.2 + (cfg.yangshangSpacing || 5)) * PX_TO_MM
@@ -373,14 +460,16 @@ const getBottomAreaStyle = (cfg) => {
 
 const yangshangPairs = (names, rows) => {
   const arr = names || []
-  if ((rows || 1) === 1) {
+  const r = (rows >= 1 && rows <= 3) ? rows : 1
+  if (r === 1) {
     return arr.map((name, i) => [{ name, idx: i }])
   }
   const pairs = []
-  for (let i = 0; i < arr.length; i += 2) {
+  for (let i = 0; i < arr.length; i += r) {
     const pair = []
-    if (arr[i] !== undefined) pair.push({ name: arr[i], idx: i })
-    if (arr[i + 1] !== undefined) pair.push({ name: arr[i + 1], idx: i + 1 })
+    for (let j = 0; j < r; j++) {
+      if (arr[i + j] !== undefined) pair.push({ name: arr[i + j], idx: i + j })
+    }
     pairs.push(pair)
   }
   return pairs
@@ -389,7 +478,7 @@ const yangshangPairs = (names, rows) => {
 const ysPairStyle = (cfg) => ({
   display: 'flex',
   flexDirection: 'column',
-  justifyContent: ((cfg.yangshangRows || 1) === 2) ? 'space-between' : 'flex-start',
+  justifyContent: ((cfg.yangshangRows || 1) >= 2) ? 'space-between' : 'flex-start',
   height: '100%',
   alignItems: 'center',
   margin: '0 ' + ((cfg.yangshangSpacing || 5) / 2) + 'px',

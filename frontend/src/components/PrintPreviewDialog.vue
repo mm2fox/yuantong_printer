@@ -42,7 +42,7 @@
             <img v-if="resolvedLayout.backgroundImage" :src="resolvedLayout.backgroundImage" class="preview-bg-image" :style="{ opacity: (resolvedLayout.backgroundOpacity || 30) / 100 }" />
             <div class="preview-content" :style="previewContentStyle">
               <div v-if="isWangSheng && resolvedDisplayItems.includes('yangshang')" class="preview-yangshang-area" :style="yangshangAreaStyle">
-                <span class="capacity-badge" :style="{ background: '#67c23a' }">横 {{ charCapacityOf(resolvedLayout, 'yangshang').horz }} × 竖 {{ charCapacityOf(resolvedLayout, 'yangshang').vert }} 字{{ resolvedLayout.yangshangRows === 2 ? ' / 行' : '' }}</span>
+                <span class="capacity-badge" :style="{ background: '#67c23a' }">横 {{ charCapacityOf(resolvedLayout, 'yangshang').horz }} × 竖 {{ charCapacityOf(resolvedLayout, 'yangshang').vert }} 字{{ resolvedLayout.yangshangRows >= 2 ? ' / 行' : '' }}</span>
               <div v-for="(pair, pIdx) in yangshangPairs(alignedYangshangNames, resolvedLayout.yangshangRows)" :key="'ysp-'+pIdx" class="ys-pair" :style="ysPairStyle">
                 <div v-for="item in pair" :key="'ys-'+item.idx" :style="(resolvedLayout.yangshangRows === 1 && resolvedLayout.yangshangAutoAdjust && resolvedLayout.yangshangVertAlign !== 'center') ? getYangshangFillItemStyle() : getYangshangItemStyle(item.idx)">
                   <template v-if="resolvedLayout.yangshangRows === 1 && resolvedLayout.yangshangAutoAdjust && resolvedLayout.yangshangVertAlign !== 'center'"><span v-for="(ch, ci) in item.name" :key="ci" :style="{ fontSize: (resolvedLayout.yangshangFontSize || 18) + 'px', lineHeight: '1' }">{{ ch }}</span></template>
@@ -327,7 +327,7 @@ const charCapacityOf = (cfg, kind) => {
   if (kind === 'yangshang') {
     const areaW = pageW * (cfg.yangshangWidthPct ?? 20) / 100
     const areaH = pageH * (cfg.yangshangHeightPct ?? 55) / 100
-    const rows = cfg.yangshangRows === 2 ? 2 : 1
+    const rows = (cfg.yangshangRows >= 1 && cfg.yangshangRows <= 3) ? cfg.yangshangRows : 1
     const fs = cfg.yangshangFontSize || 18
     const vPitch = fs * PX_TO_MM * (cfg.yangshangCharSpacing || 1.3)
     const hStep = (fs * 1.2 + (cfg.yangshangSpacing || 5)) * PX_TO_MM
@@ -420,14 +420,16 @@ const nameFillItemStyle = computed(() => {
 
 const yangshangPairs = (names, rows) => {
   const arr = names || []
-  if ((rows || 1) === 1) {
+  const r = (rows >= 1 && rows <= 3) ? rows : 1
+  if (r === 1) {
     return arr.map((name, i) => [{ name, idx: i }])
   }
   const pairs = []
-  for (let i = 0; i < arr.length; i += 2) {
+  for (let i = 0; i < arr.length; i += r) {
     const pair = []
-    if (arr[i] !== undefined) pair.push({ name: arr[i], idx: i })
-    if (arr[i + 1] !== undefined) pair.push({ name: arr[i + 1], idx: i + 1 })
+    for (let j = 0; j < r; j++) {
+      if (arr[i + j] !== undefined) pair.push({ name: arr[i + j], idx: i + j })
+    }
     pairs.push(pair)
   }
   return pairs
@@ -438,7 +440,7 @@ const ysPairStyle = computed(() => {
   return {
     display: 'flex',
     flexDirection: 'column',
-    justifyContent: ((l.yangshangRows || 1) === 2) ? 'space-between' : 'flex-start',
+    justifyContent: ((l.yangshangRows || 1) >= 2) ? 'space-between' : 'flex-start',
     height: '100%',
     alignItems: 'center',
     margin: '0 ' + ((l.yangshangSpacing || 5) / 2) + 'px',

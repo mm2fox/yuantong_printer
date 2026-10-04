@@ -445,23 +445,35 @@ def generate_template_pdf(config: dict, records: list, output_path: str, target_
                 ys_full_texts = [normalize_raw_name(n) for n in yangshang_names]
 
             ys_idx = 0
+            # 排数 clamp 到 [1,3]，与前端一致
+            ys_rows = yangshang_rows if (isinstance(yangshang_rows, int) and 1 <= yangshang_rows <= 3) else 1
             for full_text in ys_full_texts:
-                if yangshang_rows == 2:
-                    pair_idx = ys_idx // 2
+                if ys_rows >= 2:
+                    pair_idx = ys_idx // ys_rows
                     ys_x = ys_start_x - pair_idx * (ys_col_w + yangshang_spacing)
-                    is_bottom = (ys_idx % 2 == 1)
+                    row_in_pair = ys_idx % ys_rows  # 0=最上排, 1=中排, 2=最下排
                 else:
                     ys_x = ys_start_x - ys_idx * (ys_col_w + yangshang_spacing)
-                    is_bottom = False
+                    row_in_pair = 0
                 if ys_x < ys_area_left:
                     break
-                if is_bottom:
-                    ys_vstep = yangshang_font_size * yangshang_char_spacing_ratio
-                    ys_y = ys_area_bottom + (len(full_text) - 1) * ys_vstep + yangshang_font_size * 0.25
+                # 每排的子区域高度与子区域顶/底 (PDF 中 y 向上为正, area_top 是区域顶部最大 y)
+                if ys_rows >= 2:
+                    ys_sub_h = ys_area_height / ys_rows
+                    ys_sub_top = ys_area_top - row_in_pair * ys_sub_h
+                    ys_sub_bottom = ys_sub_top - ys_sub_h
                 else:
-                    ys_area_h = ys_area_height / 2 if yangshang_rows == 2 else ys_area_height
+                    ys_sub_h = ys_area_height
+                    ys_sub_top = ys_area_top
+                    ys_sub_bottom = ys_area_bottom
+                if row_in_pair == 0:
+                    # 顶排: 走 vert_start_step 在子区域内分布 (向后兼容 rows==1 和 rows==2 顶排)
                     ys_vert_mode = 'fill' if (yangshang_auto_adjust and yangshang_vert_align == 'top') else ('center' if yangshang_auto_adjust else 'top')
-                    ys_y, ys_vstep = vert_start_step(ys_vert_mode, ys_area_top, ys_area_h, yangshang_font_size, yangshang_char_spacing_ratio, len(full_text))
+                    ys_y, ys_vstep = vert_start_step(ys_vert_mode, ys_sub_top, ys_sub_h, yangshang_font_size, yangshang_char_spacing_ratio, len(full_text))
+                else:
+                    # 中/下排: 固定靠该子区域底部 (向后兼容 rows==2 is_bottom 逻辑)
+                    ys_vstep = yangshang_font_size * yangshang_char_spacing_ratio
+                    ys_y = ys_sub_bottom + (len(full_text) - 1) * ys_vstep + yangshang_font_size * 0.25
                 # 不截断超出区域的字符,与前端 overflow:visible 一致 (WYSIWYG)
                 for ch in full_text:
                     if ch == '\u3000' or ch == ' ':
