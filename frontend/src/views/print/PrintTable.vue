@@ -1120,7 +1120,7 @@ const confirmBatchPrint = async () => {
       xm9: row.xm9,
       xm10: row.xm10,
       fahui_name: row.fahui_name,
-      zuoweinum: row.zuoweinum,
+      zuoweinum: row.座次 || row.zuoweinum,
       paiwei_type: row.paiwei_type,
       shizhu_name: row.施主姓名
     }))
@@ -1202,7 +1202,7 @@ const doSilentPrint = async (rows) => {
       xm9: row.xm9,
       xm10: row.xm10,
       fahui_name: row.fahui_name,
-      zuoweinum: row.zuoweinum,
+      zuoweinum: row.座次 || row.zuoweinum,
       paiwei_type: row.paiwei_type,
       shizhu_name: row.施主姓名
     }))
