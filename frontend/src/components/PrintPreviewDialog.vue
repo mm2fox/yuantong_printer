@@ -131,7 +131,11 @@ const fetchTemplateList = async () => {
   try {
     const templateType = isWangSheng.value ? '往生牌位' : '延生牌位'
     const res = await printerTemplateApi.getList(templateType)
-    templateList.value = res.filter(t => t.是否启用 === 1)
+    const allEnabled = res.filter(t => t.是否启用 === 1)
+    // 按登记记录的牌位类型（大牌/中牌/小牌）匹配模板；未匹配则回退到该模板类型下全部启用模板
+    const paiweiType = props.record.paiwei_type
+    const matched = paiweiType ? allEnabled.filter(t => t.牌位类型 === paiweiType) : []
+    templateList.value = matched.length > 0 ? matched : allEnabled
     if (templateList.value.length > 0) {
       const defaultTemplate = templateList.value.find(t => t.是否默认 === 1)
       selectedTemplateId.value = defaultTemplate ? defaultTemplate.id : templateList.value[0].id
